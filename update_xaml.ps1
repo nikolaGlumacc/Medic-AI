@@ -365,7 +365,7 @@ $xamlContent = @'
                                 </StackPanel>
                             </Border>
                             <TextBlock Text="Respawn Timers" Style="{StaticResource TitleText}" Margin="0,18,0,8" />
-                            <ListView x:Name="RespawnTimerList" Background="Transparent" BorderThickness="0" Height="160" SelectionMode="None">
+                            <ListView x:Name="RespawnTimerList" Background="Transparent" BorderThickness="0" Height="160">
                                 <ListView.ItemContainerStyle>
                                     <Style TargetType="ListViewItem">
                                         <Setter Property="Padding" Value="0" />
