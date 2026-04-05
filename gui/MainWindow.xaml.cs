@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -497,6 +498,31 @@ namespace MedicAIGUI
             if (e.ChangedButton == MouseButton.Left)
             {
                 DragMove();
+            }
+        }
+
+        private void NavTab_Checked(object sender, RoutedEventArgs e)
+        {
+            if (sender is RadioButton radioButton)
+            {
+                // Hide all tab content
+                DashboardScroller.Visibility = Visibility.Collapsed;
+                PriorityScroller.Visibility = Visibility.Collapsed;
+                SettingsScroller.Visibility = Visibility.Collapsed;
+
+                // Show the selected tab content
+                switch (radioButton.Name)
+                {
+                    case "DashboardTabBtn":
+                        DashboardScroller.Visibility = Visibility.Visible;
+                        break;
+                    case "PriorityTabBtn":
+                        PriorityScroller.Visibility = Visibility.Visible;
+                        break;
+                    case "SettingsTabBtn":
+                        SettingsScroller.Visibility = Visibility.Visible;
+                        break;
+                }
             }
         }
     }

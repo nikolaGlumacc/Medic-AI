@@ -29,6 +29,7 @@ class MedicAIBot:
         self.follow_mode = 'active'
         self.ws = None
         self.loop = None
+        self.last_scoreboard_check = 0
         
         self.current_target = None
         self.target_health = 100
@@ -256,11 +257,14 @@ class MedicAIBot:
         self.uber_active = True
         self.uber_charge = 0
         self.uber_start_time = time.time()
-        asyncio.run_coroutine_threadsafe(self.send_activity("Uber activated!"), self.loop)
+        asyncio.run_coroutine_threadsafe(self.send_activity("Uber activated!", True, "uber_activated"), self.loop)
 
     def monitor_kill_feed(self): pass
+    
     def monitor_scoreboard(self):
-        if time.time() % 30 < 1:
+        current_time = time.time()
+        if current_time - self.last_scoreboard_check > 30:
+            self.last_scoreboard_check = current_time
             self.keyboard.press(Key.tab)
             self.keyboard.release(Key.tab)
 
@@ -293,6 +297,81 @@ class MedicAIBot:
         except: pass
     
     def reconnect(self): pass
+
+    async def handle_ws(self, websocket, path):
+        """Handle WebSocket connections from GUI"""
+        print(f"New WebSocket connection from {websocket.remote_address}")
+        self.ws = websocket
+
+        try:
+            async for message in websocket:
+                try:
+                    data = json.loads(message)
+                    msg_type = data.get('type', 'unknown')
+
+                    if msg_type == 'ping':
+                        await websocket.send(json.dumps({'type': 'pong', 'timestamp': time.time()}))
+                    elif msg_type == 'status':
+                        status = {
+                            'type': 'status',
+                            'running': self.running,
+                            'health': self.health,
+                            'target_health': self.target_health,
+                            'uber_charge': self.uber_charge,
+                            'uber_ready': self.uber_ready,
+                            'enemies_nearby': self.enemies_nearby,
+                            'current_target': self.current_target,
+                            'session_time': time.time() - (self.session_start or time.time())
+                        }
+                        await websocket.send(json.dumps(status))
+                    elif msg_type == 'start_bot':
+                        if not self.running:
+                            self.running = True
+                            self.session_start = time.time()
+                            threading.Thread(target=self.bot_main_loop, daemon=True).start()
+                            await websocket.send(json.dumps({'type': 'bot_started'}))
+                        else:
+                            await websocket.send(json.dumps({'type': 'error', 'message': 'Bot already running'}))
+                    elif msg_type == 'stop_bot':
+                        self.running = False
+                        await websocket.send(json.dumps({'type': 'bot_stopped'}))
+                    elif msg_type == 'update_config':
+                        self.config.update(data.get('config', {}))
+                        await websocket.send(json.dumps({'type': 'config_updated'}))
+                    elif msg_type == 'get_config':
+                        await websocket.send(json.dumps({'type': 'config', 'config': self.config}))
+                    else:
+                        await websocket.send(json.dumps({'type': 'error', 'message': f'Unknown message type: {msg_type}'}))
+
+                except json.JSONDecodeError:
+                    await websocket.send(json.dumps({'type': 'error', 'message': 'Invalid JSON'}))
+                except Exception as e:
+                    await websocket.send(json.dumps({'type': 'error', 'message': str(e)}))
+
+        except websockets.exceptions.ConnectionClosed:
+            print("WebSocket connection closed")
+        finally:
+            if self.ws == websocket:
+                self.ws = None
+
+    async def send_activity(self, message, important=False, activity_type="info"):
+        """Send activity update to GUI"""
+        if self.ws:
+            try:
+                activity_data = {
+                    'type': 'activity',
+                    'message': message,
+                    'important': important,
+                    'activity_type': activity_type,
+                    'timestamp': time.time()
+                }
+                await self.ws.send(json.dumps(activity_data))
+            except Exception as e:
+                print(f"Failed to send activity: {e}")
+
+    def play_local_sound(self, sound_type):
+        """Play notification sounds (placeholder)"""
+        pass
 
     async def run_server(self):
         print('Bot WebSocket server running on port 8765')

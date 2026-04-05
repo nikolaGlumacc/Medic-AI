@@ -1,3 +1,4 @@
+$xamlContent = @'
 <Window x:Class="MedicAIGUI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -31,12 +32,10 @@
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}" />
         <SolidColorBrush x:Key="TextHintBrush" Color="{StaticResource TextHint}" />
         <DropShadowEffect x:Key="PanelShadow" Color="#000000" BlurRadius="18" ShadowDepth="6" Opacity="0.2" />
-        
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="FontWeight" Value="Normal" />
         </Style>
-        
         <Style TargetType="Button">
             <Setter Property="FontFamily" Value="Segoe UI Variable" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
@@ -71,7 +70,68 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="#171A20" />
+            <Setter Property="BorderBrush" Value="#FFFFFF1A" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="0,6,0,6" />
+            <Setter Property="Margin" Value="0,6,0,6" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="#171A20" />
+            <Setter Property="BorderBrush" Value="#FFFFFF1A" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="0,6,0,6" />
+            <Setter Property="Margin" Value="0,6,0,6" />
+        </Style>
+        <Style TargetType="Slider">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Margin" Value="0,10,0,10" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Height="22">
+                            <Track x:Name="PART_Track" VerticalAlignment="Center">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Background="#1E2128" BorderBrush="#FFFFFF14" BorderThickness="0" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Width="14" Height="14" Background="{StaticResource AccentBrush}" BorderBrush="#FFFFFF22" BorderThickness="1" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Background="#1E2128" BorderBrush="#FFFFFF14" BorderThickness="0" />
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Grid Width="48" Height="26">
+                                <Border x:Name="Track" CornerRadius="13" Background="#1F2229" BorderBrush="#FFFFFF14" BorderThickness="1" />
+                                <Ellipse x:Name="Thumb" Width="20" Height="20" Fill="#14161B" Margin="3" HorizontalAlignment="Left" />
+                            </Grid>
+                            <ContentPresenter VerticalAlignment="Center" Margin="10,0,0,0" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Thumb" Property="Fill" Value="#FFFFFF" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="CardStyle" TargetType="Border">
             <Setter Property="Background" Value="#15181FDD" />
             <Setter Property="CornerRadius" Value="12" />
@@ -80,41 +140,38 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Effect" Value="{StaticResource PanelShadow}" />
         </Style>
-        
         <Style x:Key="TitleText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
         </Style>
-        
-        <!-- Small hint text style used throughout the UI -->
         <Style x:Key="HintText" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextHintBrush}" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="Normal" />
-            <Setter Property="Margin" Value="0,2,0,2" />
         </Style>
-
-        <!-- Navigation radio button style for the sidebar -->
         <Style x:Key="NavItemStyle" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Padding" Value="10,8" />
-            <Setter Property="Margin" Value="0,6,0,6" />
-            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Left" />
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="10" BorderBrush="Transparent" BorderThickness="1" Padding="4">
+                            <TextBlock x:Name="Label" Text="{TemplateBinding Content}" VerticalAlignment="Center" Margin="12,0,0,0" FontWeight="SemiBold" Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#111620" />
+                                <Setter TargetName="Root" Property="Background" Value="#1E222D" />
                                 <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#1E242F" />
+                                <Setter TargetName="Root" Property="Background" Value="#1F242F" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                                 <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -122,7 +179,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        
         <Style x:Key="ListBoxItemCardStyle" TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -140,6 +196,30 @@
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Background" Value="#111418" />
+            <Setter Property="Foreground" Value="#5F6572" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.LineUpCommand" Background="Transparent" BorderThickness="0" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Background="#2E343F" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.LineDownCommand" Background="Transparent" BorderThickness="0" />
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -202,16 +282,14 @@
             </StackPanel>
         </Border>
 
-        <!-- Main Content Area -->
-        <ScrollViewer Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="12,18,24,18" x:Name="DashboardScroller">
-            <StackPanel x:Name="MainContent">
+        <!-- Main Content - Dashboard Tab (Default) -->
+        <ScrollViewer Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto" x:Name="DashboardScroller" Margin="12,18,24,18">
+            <StackPanel x:Name="DashboardContent" Visibility="Visible">
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2.4*" />
                         <ColumnDefinition Width="1.6*" />
                     </Grid.ColumnDefinitions>
-                    
-                    <!-- Quick Controls Card -->
                     <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,12,0">
                         <StackPanel>
                             <TextBlock Text="Quick Controls" Style="{StaticResource TitleText}" />
@@ -245,11 +323,11 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="18,0,0,0">
                                     <TextBlock Text="Bot IP" Style="{StaticResource HintText}" />
-                                    <TextBox x:Name="BotIpInput" Text="127.0.0.1" Margin="0,6,0,12" />
+                                    <TextBox x:Name="BotIpInput" Text="127.0.0.1" />
                                     <TextBlock Text="Port" Style="{StaticResource HintText}" />
-                                    <TextBox x:Name="PortInput" Text="8765" Margin="0,6,0,12" />
-                                    <CheckBox x:Name="AutoReconnectCB" Content="Auto reconnect" Margin="0,0,0,12" />
-                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <TextBox x:Name="PortInput" Text="8765" />
+                                    <CheckBox x:Name="AutoReconnectCB" Content="Auto reconnect" Margin="0,12,0,0" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                                         <Button x:Name="ConnectBtn" Content="Connect" Width="110" Click="ConnectBtn_Click" />
                                         <Button x:Name="StartBtn" Content="Deploy Bot" Width="120" Margin="10,0,0,0" Click="StartBtn_Click" />
                                     </StackPanel>
@@ -257,8 +335,6 @@
                             </Grid>
                         </StackPanel>
                     </Border>
-                    
-                    <!-- Bot Settings Card -->
                     <Border Grid.Column="1" Style="{StaticResource CardStyle}">
                         <StackPanel>
                             <TextBlock Text="Bot Settings" Style="{StaticResource TitleText}" />
@@ -328,9 +404,7 @@
                         </StackPanel>
                     </Border>
                 </Grid>
-                
-                <!-- Activity Feed -->
-                <Border Style="{StaticResource CardStyle}" Margin="0,0,0,12">
+                <Border Style="{StaticResource CardStyle}" Margin="0,12,0,12">
                     <StackPanel>
                         <TextBlock Text="Activity Feed" Style="{StaticResource TitleText}" />
                         <ScrollViewer VerticalScrollBarVisibility="Auto" Height="220" Background="Transparent" Margin="0,10,0,0">
@@ -457,3 +531,7 @@
         </Border>
     </Grid>
 </Window>
+'@
+
+$xamlContent | Out-File -FilePath "C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml" -Encoding UTF8 -Force
+Write-Host "MainWindow.xaml updated successfully!"
