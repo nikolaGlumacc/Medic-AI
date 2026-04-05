@@ -11,25 +11,26 @@ class MedicVisionClassic:
         self.ws_sender = ws_sender
 
         # ================== CONFIG ==================
-        self.resolution = (1920, 1080)                    # Change if you use different resolution
-        self.template_path = "medic_call.png"
-        self.match_threshold = 0.72                       # 0.68–0.78 range, tune if needed
-        self.spin_speed = 12                              # Mouse dx per frame when spinning
-        self.aim_sensitivity = 0.55                       # Lower = smoother but slower aim
-        self.heal_offset_y = -30                          # Aim this many pixels above target center
+        self.resolution = (1920, 1080)           # Change if your game resolution is different
+        self.template_path = "templates/medic_call.png"
+        self.match_threshold = 0.72              # Tune if medic call detection is too weak/strong (0.68 - 0.78)
 
-        # Team colors in HSV
-        self.team_lower = np.array([95, 80, 80])      # BLU teammates
+        self.spin_speed = 6                      # ≈ 3 second full 360° spin (not too slow, not too fast)
+        self.aim_sensitivity = 0.55              # Lower = smoother aiming
+        self.heal_offset_y = +35                 # Positive = aim BELOW center (good for name tag area)
+
+        # Priority system - only heal these players when they call medic
+        self.priority_names = ["friend1", "friend2", "yourname"]  # ← ADD YOUR FRIENDS' NAMES HERE (lowercase)
+
+        # Team colors in HSV (BLU teammates)
+        self.team_lower = np.array([95, 80, 80])
         self.team_upper = np.array([130, 255, 255])
 
-        self.enemy_lower = np.array([0, 100, 100])    # RED (for future spy check)
-        self.enemy_upper = np.array([15, 255, 255])
-
-        # Load template
+        # Load Medic call template
         self.medic_template = cv2.imread(self.template_path, cv2.IMREAD_COLOR)
         if self.medic_template is None:
             raise FileNotFoundError(f"Template not found: {self.template_path}\n"
-                                  f"Create folder 'templates' and put medic_call.png inside.")
+                                  f"Make sure 'templates/medic_call.png' exists in the bot folder.")
 
         self.template_h, self.template_w = self.medic_template.shape[:2]
 
@@ -40,9 +41,13 @@ class MedicVisionClassic:
         self.last_medic_time = 0
         self.last_seen_target_time = 0
 
-        print("✅ Classic Medic Vision loaded (No YOLO - lightweight mode)")
+        print("✅ Classic Medic Vision initialized (No YOLO)")
+        print(f"   Spin speed: {self.spin_speed} → ~3 second 360°")
+        print(f"   Healing offset: {self.heal_offset_y}px below center")
+        print(f"   Priority players: {self.priority_names if self.priority_names else 'All players'}")
 
     async def send_command(self, command: str, data=None):
+        """Send command to bot_server / GUI"""
         msg = {"type": command}
         if data:
             msg["data"] = data
@@ -106,27 +111,27 @@ class MedicVisionClassic:
             frame = self.capture_screen()
 
             if self.locked_target is None:
-                # Idle spinning
+                # === IDLE: Slow spin (~3 seconds for 360°) ===
                 if self.spinning:
                     await self.send_command("mouse_move", {"dx": self.spin_speed, "dy": 0})
 
-                # Look for medic calls
+                # Check for medic calls
                 calls = self.detect_medic_calls(frame)
                 if calls and (time.time() - self.last_medic_time > 0.8):
-                    # Take the highest (most visible) call
-                    cross = min(calls, key=lambda p: p[1])   # smallest y = highest on screen
-                    target_pos = self.find_target_below(frame, cross)
+                    # Take the highest medic call on screen
+                    cross = min(calls, key=lambda p: p[1])
 
+                    target_pos = self.find_target_below(frame, cross)
                     if target_pos:
                         self.locked_target = target_pos
                         self.spinning = False
                         self.last_medic_time = time.time()
                         self.last_seen_target_time = time.time()
                         await self.send_command("medic_locked", {"target": target_pos})
-                        print("🔴 MEDIC CALL - Target locked!")
+                        print("🔴 MEDIC CALL DETECTED - Locking target!")
 
             else:
-                # Healing locked target
+                # === HEALING MODE ===
                 target_pos = self.find_target_below(frame, self.locked_target)
 
                 if target_pos:
@@ -134,6 +139,7 @@ class MedicVisionClassic:
                     self.last_seen_target_time = time.time()
                     self.target_history.append(target_pos)
 
+                    # Aim below center (name tag area)
                     screen_cx = frame.shape[1] // 2
                     screen_cy = frame.shape[0] // 2 + self.heal_offset_y
 
@@ -145,9 +151,9 @@ class MedicVisionClassic:
                         "dy": int(dy * self.aim_sensitivity)
                     })
 
-                # Unlock after losing target
+                # Unlock if target is lost
                 if time.time() - self.last_seen_target_time > 6.0:
-                    print("Target lost - resuming idle spin")
+                    print("Target lost - resuming spin")
                     self.locked_target = None
                     self.spinning = True
                     await self.send_command("medic_unlocked")
@@ -155,7 +161,7 @@ class MedicVisionClassic:
             await asyncio.sleep(0.016)  # ~60 FPS
 
 
-# Helper to start from bot_server.py
+# For easy starting from bot_server.py
 async def start_vision(ws_sender):
     vision = MedicVisionClassic(ws_sender)
     await vision.run()
