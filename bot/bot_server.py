@@ -1,3 +1,19 @@
+"""
+bot_server.py  –  MedicAI WebSocket bot server
+================================================
+Run directly:   python bot/bot_server.py
+Or via start.bat / start_server.bat.
+
+The GUI connects on ws://localhost:8765 and sends JSON messages to control
+the bot.  The bot main-loop runs in a background thread so the async
+WebSocket handler stays responsive.
+
+Vision is *optional*: if mss / cv2 / pytesseract are not installed the bot
+still runs – it holds W and the heal beam so it at least keeps moving forward
+and firing the medigun.  Full auto-targeting requires Tesseract OCR to be
+installed and the vision_engine dependencies present.
+"""
+
 import asyncio
 import json
 import time
@@ -8,127 +24,146 @@ import psutil
 import websockets
 import websockets.exceptions
 
+# ── optional vision & watchdog ───────────────────────────────────────────────
 try:
     from vision_engine import VisionEngine
-except ImportError:
+except (ImportError, Exception):
     VisionEngine = None
 
 try:
     from watchdog import WatchdogProcess
-except ImportError:
+except (ImportError, Exception):
     WatchdogProcess = None
 
 from pynput.keyboard import Controller as KeyboardController, Key
-from pynput.mouse import Controller as MouseController, Button
+from pynput.mouse    import Controller as MouseController, Button
 
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 class MedicAIBot:
-    def __init__(self):
-        self.config = {}
+
+    def __init__(self) -> None:
+        self.config: dict = {}
         self.session_start = None
-        self.running = False
-        self.follow_mode = 'active'
-        self.bot_state = 'standby'
-        self.ws = None
-        self.loop = None
+        self.running       = False
+        self.follow_mode   = "active"
+        self.bot_state     = "standby"
+        self.ws            = None
+        self.loop          = None
 
-        self.current_target = None
-        self.target_health = 100
-        self.health = 100
-        self.uber_charge = 0.0
-        self.uber_ready = False
-        self.uber_active = False
-        self.uber_start_time = None
+        # Live state
+        self.current_target          = None
+        self.target_health           = 100
+        self.health                  = 100
+        self.uber_charge             = 0.0
+        self.uber_ready              = False
+        self.uber_active             = False
+        self.uber_start_time         = None
 
-        self.cpu_overheat = False
-        self.spy_alertness = 0
-        self.heal_button_held = False
-        self.warned_about_ocr = False
+        # Misc flags
+        self.cpu_overheat            = False
+        self.heal_button_held        = False
+        self.warned_about_ocr        = False
         self.last_environment_update = 0.0
         self.environment_update_interval = 0.25
-        self.last_status_push = 0.0
-        self.status_push_interval = 0.5
+        self.last_status_push        = 0.0
+        self.status_push_interval    = 0.5
         self.last_any_heal_target_time = 0.0
         self.last_heal_weapon_select = 0.0
 
+        # Input controllers
         self.keyboard = KeyboardController()
-        self.mouse = MouseController()
-        self.vision = VisionEngine() if VisionEngine else None
+        self.mouse    = MouseController()
+
+        # Vision & watchdog (optional)
+        self.vision   = None
         self.watchdog = WatchdogProcess() if WatchdogProcess else None
 
-    # ------------------------------------------------------------------ #
-    #  Messaging helpers                                                   #
-    # ------------------------------------------------------------------ #
+        if VisionEngine is not None:
+            try:
+                self.vision = VisionEngine()
+            except Exception as exc:
+                print(f"[vision] Could not init VisionEngine: {exc}")
 
-    async def send_activity(self, msg, audio_trigger=False, audio_file="none"):
+    # ─────────────────────────────────────────────────────────────────────────
+    # Messaging helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def send_activity(self, msg: str, audio_trigger: bool = False,
+                            audio_file: str = "none") -> None:
         if self.ws:
             try:
-                payload = {
-                    'type': 'activity',
-                    'msg': msg,
-                    'audio': audio_trigger,
-                    'audio_file': audio_file
-                }
-                await self.ws.send(json.dumps(payload))
-            except Exception as e:
-                print(f"[send_activity] Failed: {e}")
+                await self.ws.send(json.dumps({
+                    "type": "activity",
+                    "msg": msg,
+                    "audio": audio_trigger,
+                    "audio_file": audio_file,
+                }))
+            except Exception as exc:
+                print(f"[send_activity] {exc}")
 
-    def _queue_payload(self, payload):
+    def _queue_payload(self, payload: dict) -> None:
         if self.ws and self.loop:
             try:
                 asyncio.run_coroutine_threadsafe(
-                    self.ws.send(json.dumps(payload)),
-                    self.loop
+                    self.ws.send(json.dumps(payload)), self.loop
                 )
-            except Exception as e:
-                print(f"[queue_payload] Failed: {e}")
+            except Exception as exc:
+                print(f"[queue_payload] {exc}")
 
-    def send_activity_sync(self, msg, audio_trigger=False, audio_file="none"):
-        payload = {
-            'type': 'activity',
-            'msg': msg,
-            'audio': audio_trigger,
-            'audio_file': audio_file
-        }
-        self._queue_payload(payload)
+    def send_activity_sync(self, msg: str, audio_trigger: bool = False,
+                           audio_file: str = "none") -> None:
+        self._queue_payload({
+            "type": "activity",
+            "msg": msg,
+            "audio": audio_trigger,
+            "audio_file": audio_file,
+        })
 
-    def build_status_payload(self):
+    def build_status_payload(self) -> dict:
         return {
-            'type': 'status',
-            'mode': self.bot_state,
-            'uber': int(round(self.uber_charge)),
-            'health': self.health,
-            'target': self.current_target or "",
-            'target_health': self.target_health,
-            'running': self.running
+            "type":          "status",
+            "mode":          self.bot_state,
+            "uber":          int(round(self.uber_charge)),
+            "health":        self.health,
+            "target":        self.current_target or "",
+            "target_health": self.target_health,
+            "running":       self.running,
         }
 
-    def send_status_sync(self, force=False):
+    def send_status_sync(self, force: bool = False) -> None:
         now = time.time()
         if not force and now - self.last_status_push < self.status_push_interval:
             return
         self.last_status_push = now
         self._queue_payload(self.build_status_payload())
 
-    def play_local_sound(self, sound_name):
-        pass
+    # ─────────────────────────────────────────────────────────────────────────
+    # Config helpers
+    # ─────────────────────────────────────────────────────────────────────────
 
     def get_config_value(self, *path, default=None):
-        current = self.config
+        cur = self.config
         for key in path:
-            if not isinstance(current, dict) or key not in current:
+            if not isinstance(cur, dict) or key not in cur:
                 return default
-            current = current[key]
-        return current
+            cur = cur[key]
+        return cur
 
-    def get_return_to_spawn_delay(self):
-        raw = self.get_config_value('follow_behavior', 'search_timeout', default=6)
+    def get_return_to_spawn_delay(self) -> float:
+        raw = self.get_config_value("follow_behavior", "search_timeout", default=6)
         try:
             return max(1.0, float(raw))
         except (TypeError, ValueError):
             return 6.0
 
-    def set_bot_state(self, new_state, activity_msg=None, audio_file="none"):
+    # ─────────────────────────────────────────────────────────────────────────
+    # State helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def set_bot_state(self, new_state: str, activity_msg: str = "",
+                      audio_file: str = "none") -> None:
         if self.bot_state == new_state:
             return
         self.bot_state = new_state
@@ -136,40 +171,44 @@ class MedicAIBot:
             self.send_activity_sync(activity_msg, audio_file != "none", audio_file)
         self.send_status_sync(force=True)
 
-    def reset_runtime_tracking(self):
-        self.bot_state = 'starting'
-        self.current_target = None
-        self.target_health = 100
-        self.health = 100
-        self.uber_charge = 0.0
-        self.uber_ready = False
-        self.uber_active = False
-        self.uber_start_time = None
-        self.heal_button_held = False
-        self.last_environment_update = 0.0
-        self.last_status_push = 0.0
+    def reset_runtime_tracking(self) -> None:
+        self.bot_state                 = "starting"
+        self.current_target            = None
+        self.target_health             = 100
+        self.health                    = 100
+        self.uber_charge               = 0.0
+        self.uber_ready                = False
+        self.uber_active               = False
+        self.uber_start_time           = None
+        self.heal_button_held          = False
+        self.last_environment_update   = 0.0
+        self.last_status_push          = 0.0
         self.last_any_heal_target_time = 0.0
-        self.last_heal_weapon_select = 0.0
+        self.last_heal_weapon_select   = 0.0
 
-    def select_heal_weapon(self, force=False):
+    # ─────────────────────────────────────────────────────────────────────────
+    # Input helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def select_heal_weapon(self, force: bool = False) -> None:
         now = time.time()
         if force or now - self.last_heal_weapon_select >= 1.0:
-            self.keyboard.tap('2')
+            self.keyboard.tap("2")
             self.last_heal_weapon_select = now
 
-    def press_heal_beam(self):
+    def press_heal_beam(self) -> None:
         if not self.heal_button_held:
             self.mouse.press(Button.left)
             self.heal_button_held = True
 
-    def release_heal_beam(self):
+    def release_heal_beam(self) -> None:
         if self.heal_button_held:
             self.mouse.release(Button.left)
             self.heal_button_held = False
 
-    def release_all_inputs(self):
+    def release_all_inputs(self) -> None:
         self.release_heal_beam()
-        for key in ('w', 'a', 's', 'd'):
+        for key in ("w", "a", "s", "d"):
             try:
                 self.keyboard.release(key)
             except Exception:
@@ -179,119 +218,148 @@ class MedicAIBot:
         except Exception:
             pass
 
-    # ------------------------------------------------------------------ #
-    #  WebSocket handler                                                   #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # WebSocket handler
+    # ─────────────────────────────────────────────────────────────────────────
 
-    async def handle_ws(self, websocket):
+    async def handle_ws(self, websocket) -> None:
         self.ws = websocket
         print("GUI connected.")
         try:
             async for message in websocket:
-                data = json.loads(message)
-                msg_type = data.get('type')
+                data     = json.loads(message)
+                msg_type = data.get("type")
 
-                if msg_type == 'config':
-                    self.config = data.get('config', data)
+                if msg_type == "config":
+                    self.config      = data.get("config", data)
                     self.follow_mode = str(
-                        self.get_config_value('passive_mode', 'default_mode_on_startup', default='active')
+                        self.get_config_value(
+                            "passive_mode", "default_mode_on_startup",
+                            default="active"
+                        )
                     ).strip().lower()
-                    print(f"Config received.")
+                    print("Config received.")
 
-                elif msg_type == 'start':
+                elif msg_type == "start":
                     if not self.running:
                         self.session_start = datetime.now()
-                        self.running = True
-                        threading.Thread(target=self.bot_main_loop, daemon=True).start()
-                        await self.send_activity("Bot started!", False, "none")
+                        self.running       = True
+                        threading.Thread(
+                            target=self.bot_main_loop, daemon=True
+                        ).start()
+                        await self.send_activity("Bot started!")
                         await websocket.send(json.dumps(self.build_status_payload()))
                     else:
-                        await self.send_activity("Bot is already running.", False, "none")
+                        await self.send_activity("Bot is already running.")
 
-                elif msg_type == 'set_follow_mode':
-                    self.follow_mode = data.get('mode', 'active')
-                    await self.send_activity(f"Follow mode changed to {self.follow_mode}", True, "mode_switch")
+                elif msg_type == "set_follow_mode":
+                    self.follow_mode = data.get("mode", "active")
+                    await self.send_activity(
+                        f"Follow mode → {self.follow_mode}", True, "mode_switch"
+                    )
 
-                elif msg_type == 'stop':
+                elif msg_type == "stop":
                     self.running = False
                     self.release_all_inputs()
-                    self.bot_state = 'standby'
-                    await self.send_activity("Bot stopped.", False, "none")
+                    self.bot_state = "standby"
+                    await self.send_activity("Bot stopped.")
                     await websocket.send(json.dumps(self.build_status_payload()))
 
-                elif msg_type in {'ping', 'test'}:
+                elif msg_type in {"ping", "test"}:
                     await websocket.send(json.dumps({
-                        'type': 'pong',
-                        'msg': 'Bot server ready',
-                        'running': self.running,
-                        'mode': self.bot_state,
-                        'uber': int(round(self.uber_charge))
+                        "type":    "pong",
+                        "msg":     "Bot server ready",
+                        "running": self.running,
+                        "mode":    self.bot_state,
+                        "uber":    int(round(self.uber_charge)),
                     }))
 
         except websockets.exceptions.ConnectionClosed:
             print("GUI disconnected. Awaiting new connection.")
-        except Exception as e:
-            print(f"WebSocket error: {e}")
+        except Exception as exc:
+            print(f"WebSocket error: {exc}")
         finally:
             self.ws = None
 
-    # ------------------------------------------------------------------ #
-    #  Bot main loop                                                       #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # Bot main loop  (runs in a background daemon thread)
+    # ─────────────────────────────────────────────────────────────────────────
 
-    def bot_main_loop(self):
+    def bot_main_loop(self) -> None:
         self.reset_runtime_tracking()
         self.release_all_inputs()
         self.skip_intro()
         self.enter_spawn()
         self.equip_loadout()
         self.send_status_sync(force=True)
-        self.send_activity_sync("Bot is in game and ready.", False, "none")
+
+        vision_mode = self.vision is not None
+        if vision_mode:
+            self.send_activity_sync("Vision engine active – full HUD reading enabled.")
+        else:
+            self.send_activity_sync(
+                "No vision engine – running in basic follow mode "
+                "(W + heal beam held; medigun slot 2 selected)."
+            )
 
         while self.running:
             self.check_cpu_temp()
             if self.cpu_overheat:
                 self.release_heal_beam()
-                self.set_bot_state("cooling_down", "CPU too hot. Pausing.", "none")
+                self.set_bot_state("cooling_down", "CPU too hot. Pausing.")
                 time.sleep(1)
                 continue
 
+            # ── update HUD state if vision available ──────────────────────
             self.update_environment()
             self.handle_uber()
 
-            timeout = self.get_return_to_spawn_delay()
-            time_without_target = time.time() - self.last_any_heal_target_time
+            timeout               = self.get_return_to_spawn_delay()
+            time_without_target   = time.time() - self.last_any_heal_target_time
 
+            # ── movement / healing decision ───────────────────────────────
             if self.current_target:
-                # Someone is visible and being healed — follow them
+                # OCR found a target – active healing mode
                 self.set_bot_state("healing")
                 self.select_heal_weapon()
                 self.press_heal_beam()
-                self.keyboard.release('s')
-                self.keyboard.tap('w')
-
-                # Back off slightly if target is overhealed
+                self.keyboard.release("s")
+                self.keyboard.tap("w")
                 if self.target_health and self.target_health > 142:
-                    self.keyboard.tap('s')
+                    self.keyboard.tap("s")   # back off when overhealed
+
+            elif not vision_mode:
+                # ── NO VISION: just hold W and the heal beam ──────────────
+                # The player points the game camera at their pocket; the bot
+                # will hold the beam continuously and follow forward.
+                self.set_bot_state("healing")
+                self.select_heal_weapon()
+                self.press_heal_beam()
+                self.keyboard.release("s")
+                self.keyboard.tap("w")
+                # Occasionally do a quick spy-check turn
+                self.check_spies()
 
             elif time_without_target < timeout:
-                # Lost sight recently — scan around for someone
-                self.set_bot_state("searching", "Scanning for a target...", "none")
+                # Vision active but no target yet – scan
+                self.set_bot_state("searching", "Scanning for a target…")
                 self.release_heal_beam()
-                self.keyboard.tap('w')
+                self.keyboard.tap("w")
                 sweep = 8 if int(time_without_target * 4) % 2 == 0 else -8
                 self.mouse.move(sweep, 0)
 
             else:
-                # Nobody for a while — drift back toward spawn
-                self.set_bot_state("returning_to_spawn", "No target found. Returning to spawn.", "none")
+                # Vision active, nobody seen for too long – drift back to spawn
+                self.set_bot_state("returning_to_spawn",
+                                   "No target. Returning to spawn.")
                 self.release_heal_beam()
-                self.keyboard.release('w')
-                self.keyboard.tap('s')
+                self.keyboard.release("w")
+                self.keyboard.tap("s")
                 drift = 4 if int(time.time() * 3) % 2 == 0 else -4
                 self.mouse.move(drift, 0)
 
-            self.check_spies()
+            if vision_mode:
+                self.check_spies()
             self.send_status_sync()
             time.sleep(0.05)
 
@@ -299,86 +367,71 @@ class MedicAIBot:
         self.set_bot_state("standby")
         self.send_status_sync(force=True)
 
-    # ------------------------------------------------------------------ #
-    #  Startup routines                                                    #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # Startup routines
+    # ─────────────────────────────────────────────────────────────────────────
 
-    def skip_intro(self):
-        """
-        Detects TF2 class selection screen by checking average screen brightness.
-        The class selection screen has a dark overlay, so if brightness is low
-        we click the Medic slot (fixed position, roughly center-right of screen).
-        """
+    def skip_intro(self) -> None:
+        """Click the Medic slot if the class-selection screen is detected."""
         if not self.vision:
             time.sleep(3)
             return
 
-        self.send_activity_sync("Checking for class selection screen...")
+        self.send_activity_sync("Checking for class-selection screen…")
         time.sleep(2)
 
-        frame = self.vision.capture_screen()
-        brightness = frame.mean()
+        try:
+            frame      = self.vision.capture_screen()
+            brightness = frame.mean()
+        except Exception:
+            return
 
         if brightness < 60:
-            h, w = frame.shape[:2]
-            # Medic is the 5th class button, roughly center-right of the screen
-            medic_x = int(w * 0.62)
-            medic_y = int(h * 0.55)
+            h, w     = frame.shape[:2]
+            medic_x  = int(w * 0.62)
+            medic_y  = int(h * 0.55)
             self.mouse.position = (medic_x, medic_y)
             time.sleep(0.3)
             self.mouse.click(Button.left)
             time.sleep(0.4)
-            self.mouse.click(Button.left)  # Double-click to confirm
+            self.mouse.click(Button.left)
             self.send_activity_sync("Selected Medic class.")
             time.sleep(1)
         else:
-            self.send_activity_sync("Already in game, skipping class select.")
+            self.send_activity_sync("Already in-game – skipping class select.")
 
-    def enter_spawn(self):
-        """
-        Binds F9 to 'kill' via the TF2 console, then presses it so the bot
-        respawns at the team spawn point alongside the rest of the team.
-        Only useful if the bot is already in a live match.
-        """
+    def enter_spawn(self) -> None:
+        """Bind F9 to 'kill' via the TF2 console and press it to respawn."""
         if not self.vision:
             time.sleep(2)
             return
 
-        self.send_activity_sync("Binding respawn key and respawning...")
-
-        # Open console
-        self.keyboard.tap('`')
+        self.send_activity_sync("Binding respawn key and respawning…")
+        self.keyboard.tap("`")
         time.sleep(0.5)
 
-        # Type bind command character by character
-        bind_cmd = 'bind F9 kill'
-        for char in bind_cmd:
-            self.keyboard.tap(char)
+        for ch in "bind F9 kill":
+            self.keyboard.tap(ch)
             time.sleep(0.04)
 
         self.keyboard.tap(Key.enter)
         time.sleep(0.2)
-
-        # Close console
-        self.keyboard.tap('`')
+        self.keyboard.tap("`")
         time.sleep(0.3)
-
-        # Press F9 to kill/respawn
         self.keyboard.tap(Key.f9)
-        time.sleep(3)  # Wait for respawn timer
-
+        time.sleep(3)
         self.send_activity_sync("Respawned at team spawn.")
 
-    def equip_loadout(self):
-        """Select medigun (slot 2) on spawn."""
+    def equip_loadout(self) -> None:
+        """Select the medigun (slot 2) on spawn."""
         self.select_heal_weapon(force=True)
         time.sleep(0.2)
 
-    # ------------------------------------------------------------------ #
-    #  Environment update (HUD reading)                                    #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # Environment / HUD update
+    # ─────────────────────────────────────────────────────────────────────────
 
-    def update_environment(self):
+    def update_environment(self) -> None:
         now = time.time()
         if now - self.last_environment_update < self.environment_update_interval:
             return
@@ -389,16 +442,16 @@ class MedicAIBot:
 
         try:
             snapshot = self.vision.read_hud_snapshot()
-        except Exception as e:
-            print(f"[update_environment] Vision error: {e}")
+        except Exception as exc:
+            print(f"[update_environment] Vision error: {exc}")
             return
 
+        # Warn once if OCR is unavailable
         if not snapshot.ocr_available and not self.warned_about_ocr:
             self.warned_about_ocr = True
             self.send_activity_sync(
-                "Tesseract OCR not found. HUD reading is disabled. Install Tesseract on this machine.",
-                False,
-                "none"
+                "Tesseract OCR not found – HUD reading disabled. "
+                "Install Tesseract to enable full auto-targeting."
             )
 
         if snapshot.health is not None:
@@ -411,99 +464,103 @@ class MedicAIBot:
             self.uber_charge = snapshot.uber_charge
 
         if snapshot.heal_target_name:
-            self.current_target = snapshot.heal_target_name
+            self.current_target            = snapshot.heal_target_name
             self.last_any_heal_target_time = now
         else:
             self.current_target = None
 
-        # Backstab detection — health dropped to 0 suddenly
         if self.health <= 0:
             self.send_activity_sync("Backstabbed!", True, "spy")
 
-    # ------------------------------------------------------------------ #
-    #  Uber                                                                #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # Uber management
+    # ─────────────────────────────────────────────────────────────────────────
 
-    def handle_uber(self):
+    def handle_uber(self) -> None:
         if self.uber_active:
             if time.time() - self.uber_start_time > 8:
                 self.uber_active = False
-                self.send_activity_sync("Uber ended. Duration: 8s.", True, "uber_cooldown")
+                self.send_activity_sync("Uber ended.", True, "uber_cooldown")
             return
 
         if self.uber_charge >= 100 and not self.uber_ready:
             self.uber_ready = True
             self.send_activity_sync("Uber ready!", True, "uber_ready")
 
-        ub_behavior = self.config.get('uber_behavior', 'Manual')
-        threshold = 30
+        ub_behavior = self.config.get("uber_behavior", "Manual")
+        threshold   = 30
         try:
-            threshold = int(self.get_config_value('uber', 'auto_pop_health_threshold', default=30))
+            threshold = int(
+                self.get_config_value("uber", "auto_pop_health_threshold", default=30)
+            )
         except (TypeError, ValueError):
             pass
 
-        if ub_behavior == 'Auto-pop' and self.target_health < threshold and self.uber_ready:
+        if ub_behavior == "Auto-pop" and self.target_health < threshold and self.uber_ready:
             self.pop_uber()
-        elif ub_behavior == 'Suggest' and self.current_target and self.uber_ready:
+        elif ub_behavior == "Suggest" and self.current_target and self.uber_ready:
             self.send_activity_sync("Suggesting Uber!", True, "uber_ready")
 
-    def pop_uber(self):
+    def pop_uber(self) -> None:
         self.select_heal_weapon(force=True)
         self.mouse.click(Button.right)
-        self.uber_ready = False
-        self.uber_active = True
-        self.uber_charge = 0
+        self.uber_ready      = False
+        self.uber_active     = True
+        self.uber_charge     = 0
         self.uber_start_time = time.time()
         self.send_activity_sync("Uber activated!", True, "uber_activated")
 
-    # ------------------------------------------------------------------ #
-    #  Spy check                                                           #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # Spy check
+    # ─────────────────────────────────────────────────────────────────────────
 
-    def check_spies(self):
-        freq = self.config.get('spy_check_frequency', 10)
+    def check_spies(self) -> None:
+        freq = self.config.get("spy_check_frequency", 10)
         try:
             freq = max(1, int(freq))
         except (TypeError, ValueError):
             freq = 10
-
         if time.time() % freq < 0.1:
             self.mouse.move(180, 0)
             time.sleep(0.05)
             self.mouse.move(180, 0)
 
-    # ------------------------------------------------------------------ #
-    #  System                                                              #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # System
+    # ─────────────────────────────────────────────────────────────────────────
 
-    def check_stuck(self):
-        return False
-
-    def check_cpu_temp(self):
+    def check_cpu_temp(self) -> None:
         try:
             temps = psutil.sensors_temperatures()
-            if temps and 'coretemp' in temps:
-                highest = max(t.current for t in temps['coretemp'])
-                threshold = float(self.get_config_value('performance', 'cpu_temperature_throttle_threshold', default=85))
+            if temps and "coretemp" in temps:
+                highest   = max(t.current for t in temps["coretemp"])
+                threshold = float(
+                    self.get_config_value(
+                        "performance", "cpu_temperature_throttle_threshold",
+                        default=85
+                    )
+                )
                 self.cpu_overheat = highest > threshold
         except Exception:
             pass
 
-    # ------------------------------------------------------------------ #
-    #  Server startup                                                      #
-    # ------------------------------------------------------------------ #
+    # ─────────────────────────────────────────────────────────────────────────
+    # Server entry-point
+    # ─────────────────────────────────────────────────────────────────────────
 
-    async def run_server(self):
-        print('Bot WebSocket server running on port 8765')
-        async with websockets.serve(self.handle_ws, '0.0.0.0', 8765):
-            await asyncio.Future()
+    async def run_server(self) -> None:
+        print("Bot WebSocket server running on port 8765")
+        async with websockets.serve(self.handle_ws, "0.0.0.0", 8765):
+            await asyncio.Future()   # run forever
 
-    def run(self):
+    def run(self) -> None:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.loop.run_until_complete(self.run_server())
 
 
-if __name__ == '__main__':
+# ─────────────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
     bot = MedicAIBot()
     bot.run()
