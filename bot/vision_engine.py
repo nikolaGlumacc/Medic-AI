@@ -62,6 +62,7 @@ class VisionEngine:
         self._ocr_available = False
         self._np  = None
         self._cv2 = None
+        self._tess = None
 
         self._init_libs()
 
@@ -196,14 +197,17 @@ class MedicVisionClassic:
 
         self.priority_names: set = set()
 
-        # Team colours (BLU teammates – HSV)
+        # FIX #3: guard numpy array initialisation – only create arrays when
+        # numpy is actually available, otherwise default to None so callers
+        # can check before using them.
+        self.team_lower = None
+        self.team_upper = None
         try:
             import numpy as np
             self.team_lower = np.array([95, 80, 80])
             self.team_upper = np.array([130, 255, 255])
         except ImportError:
-            self.team_lower = None
-            self.team_upper = None
+            pass
 
         # Load template
         try:
@@ -268,6 +272,12 @@ class MedicVisionClassic:
         return calls
 
     def find_target_below(self, frame, cross_pos):
+        # FIX #3: guard against uninitialised team_lower / team_upper which
+        # would cause an AttributeError (NoneType has no attribute 'dtype')
+        # when cv2.inRange is called.
+        if self.team_lower is None or self.team_upper is None:
+            return None
+
         import cv2
         x, y     = cross_pos
         roi_y1   = max(0, y + 25)

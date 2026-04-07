@@ -72,6 +72,10 @@ class MedicAIBot:
         self.last_any_heal_target_time = 0.0
         self.last_heal_weapon_select = 0.0
 
+        # FIX #1: replace the broken time.time() % freq trick with a proper
+        # last-check timestamp so spy checks actually fire on schedule.
+        self.last_spy_check_time     = 0.0
+
         # Input controllers
         self.keyboard = KeyboardController()
         self.mouse    = MouseController()
@@ -185,6 +189,7 @@ class MedicAIBot:
         self.last_status_push          = 0.0
         self.last_any_heal_target_time = 0.0
         self.last_heal_weapon_select   = 0.0
+        self.last_spy_check_time       = 0.0  # FIX #1: reset spy check timer
 
     # ─────────────────────────────────────────────────────────────────────────
     # Input helpers
@@ -193,17 +198,29 @@ class MedicAIBot:
     def select_heal_weapon(self, force: bool = False) -> None:
         now = time.time()
         if force or now - self.last_heal_weapon_select >= 1.0:
-            self.keyboard.tap("2")
+            # FIX #2: wrap pynput calls in try/except – they can throw if the
+            # OS input subsystem is temporarily unavailable.
+            try:
+                self.keyboard.tap("2")
+            except Exception as exc:
+                print(f"[select_heal_weapon] {exc}")
             self.last_heal_weapon_select = now
 
     def press_heal_beam(self) -> None:
         if not self.heal_button_held:
-            self.mouse.press(Button.left)
+            try:
+                self.mouse.press(Button.left)
+            except Exception as exc:
+                print(f"[press_heal_beam] {exc}")
+                return
             self.heal_button_held = True
 
     def release_heal_beam(self) -> None:
         if self.heal_button_held:
-            self.mouse.release(Button.left)
+            try:
+                self.mouse.release(Button.left)
+            except Exception as exc:
+                print(f"[release_heal_beam] {exc}")
             self.heal_button_held = False
 
     def release_all_inputs(self) -> None:
@@ -217,6 +234,20 @@ class MedicAIBot:
             self.keyboard.release(Key.space)
         except Exception:
             pass
+
+    def _tap(self, key) -> None:
+        """Safe wrapper around keyboard.tap()."""
+        try:
+            self.keyboard.tap(key)
+        except Exception as exc:
+            print(f"[_tap] {exc}")
+
+    def _release(self, key) -> None:
+        """Safe wrapper around keyboard.release()."""
+        try:
+            self.keyboard.release(key)
+        except Exception as exc:
+            print(f"[_release] {exc}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # WebSocket handler
@@ -323,40 +354,43 @@ class MedicAIBot:
                 self.set_bot_state("healing")
                 self.select_heal_weapon()
                 self.press_heal_beam()
-                self.keyboard.release("s")
-                self.keyboard.tap("w")
+                self._release("s")
+                self._tap("w")
                 if self.target_health and self.target_health > 142:
-                    self.keyboard.tap("s")   # back off when overhealed
+                    self._tap("s")   # back off when overhealed
 
             elif not vision_mode:
                 # ── NO VISION: just hold W and the heal beam ──────────────
-                # The player points the game camera at their pocket; the bot
-                # will hold the beam continuously and follow forward.
                 self.set_bot_state("healing")
                 self.select_heal_weapon()
                 self.press_heal_beam()
-                self.keyboard.release("s")
-                self.keyboard.tap("w")
-                # Occasionally do a quick spy-check turn
+                self._release("s")
+                self._tap("w")
                 self.check_spies()
 
             elif time_without_target < timeout:
                 # Vision active but no target yet – scan
                 self.set_bot_state("searching", "Scanning for a target…")
                 self.release_heal_beam()
-                self.keyboard.tap("w")
+                self._tap("w")
                 sweep = 8 if int(time_without_target * 4) % 2 == 0 else -8
-                self.mouse.move(sweep, 0)
+                try:
+                    self.mouse.move(sweep, 0)
+                except Exception:
+                    pass
 
             else:
                 # Vision active, nobody seen for too long – drift back to spawn
                 self.set_bot_state("returning_to_spawn",
                                    "No target. Returning to spawn.")
                 self.release_heal_beam()
-                self.keyboard.release("w")
-                self.keyboard.tap("s")
+                self._release("w")
+                self._tap("s")
                 drift = 4 if int(time.time() * 3) % 2 == 0 else -4
-                self.mouse.move(drift, 0)
+                try:
+                    self.mouse.move(drift, 0)
+                except Exception:
+                    pass
 
             if vision_mode:
                 self.check_spies()
@@ -390,11 +424,14 @@ class MedicAIBot:
             h, w     = frame.shape[:2]
             medic_x  = int(w * 0.62)
             medic_y  = int(h * 0.55)
-            self.mouse.position = (medic_x, medic_y)
-            time.sleep(0.3)
-            self.mouse.click(Button.left)
-            time.sleep(0.4)
-            self.mouse.click(Button.left)
+            try:
+                self.mouse.position = (medic_x, medic_y)
+                time.sleep(0.3)
+                self.mouse.click(Button.left)
+                time.sleep(0.4)
+                self.mouse.click(Button.left)
+            except Exception as exc:
+                print(f"[skip_intro] mouse error: {exc}")
             self.send_activity_sync("Selected Medic class.")
             time.sleep(1)
         else:
@@ -407,18 +444,18 @@ class MedicAIBot:
             return
 
         self.send_activity_sync("Binding respawn key and respawning…")
-        self.keyboard.tap("`")
+        self._tap("`")
         time.sleep(0.5)
 
         for ch in "bind F9 kill":
-            self.keyboard.tap(ch)
+            self._tap(ch)
             time.sleep(0.04)
 
-        self.keyboard.tap(Key.enter)
+        self._tap(Key.enter)
         time.sleep(0.2)
-        self.keyboard.tap("`")
+        self._tap("`")
         time.sleep(0.3)
-        self.keyboard.tap(Key.f9)
+        self._tap(Key.f9)
         time.sleep(3)
         self.send_activity_sync("Respawned at team spawn.")
 
@@ -503,7 +540,10 @@ class MedicAIBot:
 
     def pop_uber(self) -> None:
         self.select_heal_weapon(force=True)
-        self.mouse.click(Button.right)
+        try:
+            self.mouse.click(Button.right)
+        except Exception as exc:
+            print(f"[pop_uber] {exc}")
         self.uber_ready      = False
         self.uber_active     = True
         self.uber_charge     = 0
@@ -515,15 +555,32 @@ class MedicAIBot:
     # ─────────────────────────────────────────────────────────────────────────
 
     def check_spies(self) -> None:
+        # FIX #1: original code used `time.time() % freq < 0.1` which almost
+        # never fires because time.time() returns a large Unix timestamp and
+        # the fractional remainder only crosses 0 briefly.  Use a proper
+        # elapsed-time check instead.
         freq = self.config.get("spy_check_frequency", 10)
         try:
             freq = max(1, int(freq))
         except (TypeError, ValueError):
             freq = 10
-        if time.time() % freq < 0.1:
-            self.mouse.move(180, 0)
+
+        now = time.time()
+        if now - self.last_spy_check_time < freq:
+            return
+
+        self.last_spy_check_time = now
+        flick = int(
+            self.get_config_value(
+                "spy_detection", "spy_check_camera_flick_speed", default=180
+            )
+        )
+        try:
+            self.mouse.move(flick, 0)
             time.sleep(0.05)
-            self.mouse.move(180, 0)
+            self.mouse.move(-flick, 0)
+        except Exception as exc:
+            print(f"[check_spies] mouse error: {exc}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # System
