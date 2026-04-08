@@ -9,3 +9,4 @@ pytesseract>=0.3.10
 ultralytics>=8.0.0
 torch>=2.0.0
 torchvision>=0.15.0
+pyautogui>=0.9.54

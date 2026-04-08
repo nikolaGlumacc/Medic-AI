@@ -1,915 +1,807 @@
+#!/usr/bin/env python3
 """
-bot_server.py  –  MedicAI WebSocket bot server  (all-in-one)
-=============================================================
-vision_engine.py and watchdog.py are merged into this file.
-
-Run directly:   python bot_server.py
-Or via start.bat / start_server.bat.
-
-The GUI connects on ws://localhost:8765 and sends JSON messages to control
-the bot.  The bot main-loop runs in a background thread so the async
-WebSocket handler stays responsive.
-
-Vision is *optional*: if mss / cv2 / pytesseract are not installed the bot
-still runs – it holds W and the heal beam so it at least keeps moving forward
-and firing the medigun.  Full auto-targeting requires Tesseract OCR to be
-installed and the optional vision dependencies present.
+Medic-AI Bot Server
+WebSocket-controlled TF2 Medic bot with YOLO vision, OCR, and weapon‑switch reversion.
 """
-
-from __future__ import annotations
 
 import asyncio
 import json
 import os
-import subprocess
+import sys
 import time
 import threading
-from collections import deque
+import logging
+import random
+import math
+from typing import Optional, Dict, Any, List, Tuple, Union
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional
+from enum import Enum
+from pathlib import Path
 
-import psutil
+# Networking
 import websockets
-import websockets.exceptions
+from websockets.server import WebSocketServerProtocol, serve
 
-from pynput.keyboard import Controller as KeyboardController, Key
-from pynput.mouse    import Controller as MouseController, Button
+# Input simulation
+import pynput
+from pynput.keyboard import Key, Controller as KeyboardController, KeyCode
+from pynput.mouse import Button, Controller as MouseController
 
+# Screen capture & vision
+import mss
+import numpy as np
+import cv2
 
-# ══════════════════════════════════════════════════════════════════════════════
-# ░░  VISION ENGINE  (formerly vision_engine.py)
-# ══════════════════════════════════════════════════════════════════════════════
+# System monitoring
+import psutil
+
+# Image recognition for weapon icons
+import pyautogui
+
+# Optional: YOLO (uncomment if using Ultralytics)
+# from ultralytics import YOLO
+
+# Optional: OCR (uncomment if using Tesseract)
+# import pytesseract
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------------
+# Constants & Enums
+# ----------------------------------------------------------------------
+
+class BotState(Enum):
+    """Possible bot operational states."""
+    IDLE = "idle"
+    ACTIVE = "active"
+    SEARCHING = "searching"
+    HEALING = "healing"
+    UBER_READY = "uber_ready"
+    UBER_ACTIVE = "uber_active"
+    RETREATING = "retreating"
+    SWITCHING_LOADOUT = "switching_loadout"   # State for weapon reversion
+
+class PlayerClass(Enum):
+    """TF2 class IDs (simplified)."""
+    SCOUT = 1
+    SOLDIER = 2
+    PYRO = 3
+    DEMOMAN = 4
+    HEAVY = 5
+    ENGINEER = 6
+    MEDIC = 7
+    SNIPER = 8
+    SPY = 9
 
 @dataclass
-class HudSnapshot:
-    """What bot_main_loop reads from the HUD each tick."""
-    health:             Optional[int]   = None
-    heal_target_health: Optional[int]   = None
-    uber_charge:        Optional[float] = None
-    heal_target_name:   Optional[str]   = None
-    ocr_available:      bool            = False
+class Player:
+    """Represents a detected player."""
+    x: float = 0.0
+    y: float = 0.0
+    w: float = 0.0
+    h: float = 0.0
+    health: int = 0
+    max_health: int = 0
+    class_id: int = 0
+    is_ubered: bool = False
+    distance: float = 0.0
+    is_critical: bool = False
 
+# ----------------------------------------------------------------------
+# Main Bot Class
+# ----------------------------------------------------------------------
 
-class VisionEngine:
-    """
-    Screen-capture + HUD-reading back-end.
+class MedicBot:
+    """TF2 Medic bot with WebSocket control and weapon‑switch reversion."""
 
-    Dependency chain (all optional – degrades gracefully):
-        mss          – screen capture
-        cv2 / numpy  – image processing
-        pytesseract  – OCR for HP / name / Uber text
-    """
+    def __init__(self):
+        # --- State ---
+        self.running = False
+        self.bot_state = BotState.IDLE
+        self.config: Dict[str, Any] = {}
 
-    # TF2 default 1080p HUD regions  (left, top, width, height)
-    _REGION_HEALTH      = (45,  880, 120, 55)
-    _REGION_TARGET_HP   = (700, 840, 160, 50)
-    _REGION_TARGET_NAME = (620, 800, 320, 40)
-    _REGION_UBER        = (765, 890, 130, 35)
-
-    def __init__(self) -> None:
-        self.sct   = None
-        self.model = None          # reserved for future YOLO integration
-        self._ocr_available = False
-        self._np   = None
-        self._cv2  = None
-        self._tess = None
-        self._init_libs()
-
-    # ── initialisation ───────────────────────────────────────────────────────
-
-    def _init_libs(self) -> None:
-        try:
-            import mss as _mss
-            self.sct = _mss.mss()
-        except ImportError:
-            return
-
-        try:
-            import numpy as _np
-            import cv2 as _cv2
-            self._np  = _np
-            self._cv2 = _cv2
-        except ImportError:
-            return
-
-        try:
-            import pytesseract as _tess
-            _tess.get_tesseract_version()
-            self._tess = _tess
-            self._ocr_available = True
-        except Exception:
-            self._tess = None
-            self._ocr_available = False
-
-    # ── public API ───────────────────────────────────────────────────────────
-
-    def capture_screen(self):
-        """Return a BGR numpy array of the primary monitor, or a blank frame."""
-        np = self._np
-        cv2 = self._cv2
-
-        if self.sct is None or np is None or cv2 is None:
-            try:
-                import numpy as _np
-                return _np.zeros((1080, 1920, 3), dtype=_np.uint8)
-            except ImportError:
-                return None
-
-        monitor = self.sct.monitors[1]
-        raw = self.sct.grab(monitor)
-        frame = np.array(raw)
-        return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-
-    def read_hud_snapshot(self) -> HudSnapshot:
-        snap = HudSnapshot(ocr_available=self._ocr_available)
-        if not self._ocr_available:
-            return snap
-
-        frame = self.capture_screen()
-        if frame is None:
-            return snap
-
-        snap.health             = self._read_int_region(frame, self._REGION_HEALTH)
-        snap.heal_target_health = self._read_int_region(frame, self._REGION_TARGET_HP)
-        snap.uber_charge        = self._read_float_region(frame, self._REGION_UBER)
-        snap.heal_target_name   = self._read_text_region(frame, self._REGION_TARGET_NAME)
-        return snap
-
-    # ── private helpers ──────────────────────────────────────────────────────
-
-    def _crop(self, frame, region):
-        x, y, w, h = region
-        return frame[y:y + h, x:x + w]
-
-    def _ocr_int(self, roi) -> Optional[int]:
-        cv2, tess = self._cv2, self._tess
-        if roi is None or cv2 is None:
-            return None
-        gray    = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        _, bw   = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        cfg     = "--psm 8 --oem 1 -c tessedit_char_whitelist=0123456789"
-        raw     = tess.image_to_string(bw, config=cfg).strip()
-        digits  = "".join(ch for ch in raw if ch.isdigit())
-        return int(digits) if digits else None
-
-    def _read_int_region(self, frame, region) -> Optional[int]:
-        try:
-            return self._ocr_int(self._crop(frame, region))
-        except Exception:
-            return None
-
-    def _read_float_region(self, frame, region) -> Optional[float]:
-        val = self._read_int_region(frame, region)
-        return float(val) if val is not None else None
-
-    def _read_text_region(self, frame, region) -> Optional[str]:
-        if not self._ocr_available or self._cv2 is None:
-            return None
-        try:
-            roi  = self._crop(frame, region)
-            gray = self._cv2.cvtColor(roi, self._cv2.COLOR_BGR2GRAY)
-            cfg  = "--psm 7 --oem 1"
-            text = self._tess.image_to_string(gray, config=cfg).strip()
-            return text if text else None
-        except Exception:
-            return None
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ░░  WATCHDOG  (formerly watchdog.py)
-# ══════════════════════════════════════════════════════════════════════════════
-
-class WatchdogProcess:
-    """Monitors the TF2 process and calls back on crash."""
-
-    def __init__(self, executable: str = "hl2.exe") -> None:
-        self.executable  = executable
-        self.tf2_process = None
-
-    def start_game(self, server_ip: Optional[str] = None) -> None:
-        cmd = ["steam", "-applaunch", "440"]
-        if server_ip:
-            cmd.extend(["+connect", server_ip])
-        print(f"Watchdog: Starting TF2 with {cmd}")
-        subprocess.Popen(cmd)
-        time.sleep(15)
-        self.find_process()
-
-    def find_process(self) -> bool:
-        for proc in psutil.process_iter(["name", "pid"]):
-            if proc.info["name"] == self.executable:
-                self.tf2_process = proc
-                return True
-        self.tf2_process = None
-        return False
-
-    def is_running(self) -> bool:
-        if self.tf2_process:
-            return self.tf2_process.is_running()
-        return self.find_process()
-
-    def monitor_loop(self, callback_on_crash) -> None:
-        while True:
-            if not self.is_running():
-                print("Watchdog: TF2 crash detected!")
-                callback_on_crash()
-            time.sleep(5)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ░░  MEDIC-VISION CLASSIC  (legacy – used by test_vision.py)
-# ══════════════════════════════════════════════════════════════════════════════
-
-class MedicVisionClassic:
-    """Template-matching vision loop (test / debug use)."""
-
-    def __init__(self, ws_sender) -> None:
-        self.ws_sender       = ws_sender
-        self.resolution      = (1920, 1080)
-        self.template_path   = "templates/medic_call.png"
-        self.match_threshold = 0.68
-        self.spin_speed      = 6
-        self.aim_sensitivity = 0.58
-        self.heal_offset_y   = +40
-        self.priority_names: set = set()
-
-        self.team_lower = None
-        self.team_upper = None
-        try:
-            import numpy as np
-            self.team_lower = np.array([95, 80, 80])
-            self.team_upper = np.array([130, 255, 255])
-        except ImportError:
-            pass
-
-        try:
-            import cv2
-            self.medic_template = cv2.imread(self.template_path, cv2.IMREAD_COLOR)
-            if self.medic_template is None:
-                raise FileNotFoundError(
-                    f"Template not found: {self.template_path}\n"
-                    "Place 'medic_call.png' inside a 'templates/' folder."
-                )
-            self.template_h, self.template_w = self.medic_template.shape[:2]
-        except ImportError:
-            raise RuntimeError("cv2 (opencv-python) is required for MedicVisionClassic.")
-
-        self.locked_target         = None
-        self.target_history        = deque(maxlen=15)
-        self.spinning              = True
-        self.last_medic_time       = 0.0
-        self.last_seen_target_time = 0.0
-        print("MedicVisionClassic loaded")
-
-    async def send_command(self, command: str, data=None) -> None:
-        msg = {"type": command}
-        if data:
-            msg["data"] = data
-        try:
-            await self.ws_sender(json.dumps(msg))
-        except Exception:
-            pass
-
-    def update_config(self, config_data: dict) -> None:
-        if "priority_names" in config_data:
-            self.priority_names = {n.lower().strip() for n in config_data["priority_names"]}
-
-    def capture_screen(self):
-        import mss
-        import numpy as np
-        import cv2
-        with mss.mss() as sct:
-            mon = {"top": 0, "left": 0,
-                   "width": self.resolution[0], "height": self.resolution[1]}
-            img = np.array(sct.grab(mon))
-            return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-
-    def detect_medic_calls(self, frame):
-        import cv2
-        import numpy as np
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        tmpl = cv2.cvtColor(self.medic_template, cv2.COLOR_BGR2GRAY)
-        res  = cv2.matchTemplate(gray, tmpl, cv2.TM_CCOEFF_NORMED)
-        locs = np.where(res >= self.match_threshold)
-        calls = []
-        for pt in zip(*locs[::-1]):
-            cx = pt[0] + self.template_w // 2
-            cy = pt[1] + self.template_h // 2 - 25
-            calls.append((cx, cy))
-        return calls
-
-    def find_target_below(self, frame, cross_pos):
-        if self.team_lower is None or self.team_upper is None:
-            return None
-        import cv2
-        x, y   = cross_pos
-        roi_y1 = max(0, y + 25)
-        roi_y2 = min(frame.shape[0], y + 240)
-        roi_x1 = max(0, x - 80)
-        roi_x2 = min(frame.shape[1], x + 80)
-        if roi_y1 >= roi_y2 or roi_x1 >= roi_x2:
-            return None
-        roi  = frame[roi_y1:roi_y2, roi_x1:roi_x2]
-        hsv  = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, self.team_lower, self.team_upper)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None
-        largest = max(contours, key=cv2.contourArea)
-        if cv2.contourArea(largest) < 400:
-            return None
-        m = cv2.moments(largest)
-        if m["m00"] == 0:
-            return None
-        cx = int(m["m10"] / m["m00"]) + roi_x1
-        cy = int(m["m01"] / m["m00"]) + roi_y1 + 25
-        return (cx, cy)
-
-    async def run(self) -> None:
-        import cv2
-        print("Vision loop started – waiting for medic calls…")
-        while True:
-            frame = self.capture_screen()
-            debug = frame.copy()
-            calls = self.detect_medic_calls(frame)
-            if calls:
-                for i, cross in enumerate(calls):
-                    cv2.circle(debug, cross, 18, (0, 0, 255), 4)
-                    cv2.putText(debug, f"MEDIC CALL {i+1}",
-                                (cross[0] - 60, cross[1] - 35),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            if self.locked_target:
-                tx, ty = self.locked_target
-                cv2.circle(debug, (tx, ty), 25, (0, 255, 0), 4)
-                cv2.putText(debug, "LOCKED TARGET", (tx - 80, ty - 45),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-            cv2.imshow("Medic Bot Debug", debug)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-            if self.locked_target is None:
-                if self.spinning:
-                    await self.send_command("mouse_move", {"dx": self.spin_speed, "dy": 0})
-                if calls and (time.time() - self.last_medic_time > 0.7):
-                    cross      = min(calls, key=lambda p: p[1])
-                    target_pos = self.find_target_below(frame, cross)
-                    if target_pos:
-                        self.locked_target         = target_pos
-                        self.spinning              = False
-                        self.last_medic_time       = time.time()
-                        self.last_seen_target_time = time.time()
-                        await self.send_command("medic_locked")
-            else:
-                target_pos = self.find_target_below(frame, self.locked_target)
-                if target_pos:
-                    self.locked_target         = target_pos
-                    self.last_seen_target_time = time.time()
-                    screen_cx = frame.shape[1] // 2
-                    screen_cy = frame.shape[0] // 2 + self.heal_offset_y
-                    dx = target_pos[0] - screen_cx
-                    dy = target_pos[1] - screen_cy
-                    await self.send_command("mouse_move", {
-                        "dx": int(dx * self.aim_sensitivity),
-                        "dy": int(dy * self.aim_sensitivity),
-                    })
-                elif time.time() - self.last_seen_target_time > 5.0:
-                    self.locked_target = None
-                    self.spinning      = True
-                    await self.send_command("medic_unlocked")
-            await asyncio.sleep(0.01)
-
-
-async def start_vision(ws_sender) -> None:
-    vision = MedicVisionClassic(ws_sender)
-    await vision.run()
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ░░  BOT SERVER
-# ══════════════════════════════════════════════════════════════════════════════
-
-class MedicAIBot:
-
-    def __init__(self) -> None:
-        self.config: dict = {}
-        self.session_start = None
-        self.running       = False
-        self.follow_mode   = "active"
-        self.bot_state     = "standby"
-        self.ws            = None
-        self.loop          = None
-
-        # Live state
-        self.current_target          = None
-        self.target_health           = 100
-        self.health                  = 100
-        self.uber_charge             = 0.0
-        self.uber_ready              = False
-        self.uber_active             = False
-        self.uber_start_time         = None
-
-        # Misc flags
-        self.cpu_overheat            = False
-        self.heal_button_held        = False
-        self.warned_about_ocr        = False
-        self.last_environment_update = 0.0
-        self.environment_update_interval = 0.25
-        self.last_status_push        = 0.0
-        self.status_push_interval    = 0.5
-        self.last_any_heal_target_time = 0.0
-        self.last_heal_weapon_select = 0.0
-        self.last_spy_check_time     = 0.0
-
-        # Input controllers
+        # --- Input Controllers (thread‑safe via lock) ---
         self.keyboard = KeyboardController()
-        self.mouse    = MouseController()
+        self.mouse = MouseController()
+        self.input_lock = threading.RLock()
 
-        # Vision & watchdog (optional)
-        self.vision   = None
-        self.watchdog = WatchdogProcess()
+        # --- Screen Capture ---
+        self.sct = mss.mss()
+        self.monitor = self.sct.monitors[1]  # Primary monitor
+        self.screen_width = self.monitor["width"]
+        self.screen_height = self.monitor["height"]
 
-        try:
-            self.vision = VisionEngine()
-        except Exception as exc:
-            print(f"[vision] Could not init VisionEngine: {exc}")
+        # --- Vision Models (placeholders – replace with your actual models) ---
+        self.yolo_model = None          # e.g., YOLO("best.pt")
+        self.ocr_engine = None          # e.g., pytesseract
 
-    # ─── Messaging helpers ────────────────────────────────────────────────────
+        # --- Game State ---
+        self.players: List[Player] = []
+        self.local_player: Optional[Player] = None
+        self.uber_percent = 0.0
+        self.uber_active = False
+        self.crosshair_target: Optional[Player] = None
 
-    async def send_activity(self, msg: str, audio_trigger: bool = False,
-                            audio_file: str = "none") -> None:
-        if self.ws:
-            try:
-                await self.ws.send(json.dumps({
-                    "type": "activity",
-                    "msg": msg,
-                    "audio": audio_trigger,
-                    "audio_file": audio_file,
-                }))
-            except Exception as exc:
-                print(f"[send_activity] {exc}")
+        # --- CPU Thermal Throttling ---
+        self.cpu_temp = 0.0
+        self.cpu_overheat = False
+        self.temp_limit = 85.0
 
-    def _queue_payload(self, payload: dict) -> None:
-        if self.ws and self.loop:
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    self.ws.send(json.dumps(payload)), self.loop
-                )
-            except Exception as exc:
-                print(f"[queue_payload] {exc}")
+        # --- Activity Tracking ---
+        self.last_action_time = time.time()
+        self.last_position = (self.screen_width // 2, self.screen_height // 2)
 
-    def send_activity_sync(self, msg: str, audio_trigger: bool = False,
-                           audio_file: str = "none") -> None:
-        self._queue_payload({
-            "type": "activity",
-            "msg": msg,
-            "audio": audio_trigger,
-            "audio_file": audio_file,
-        })
+        # --- WebSocket ---
+        self.ws_server = None
+        self.ws_clients: List[WebSocketServerProtocol] = []
+        self.ws_host = "localhost"
+        self.ws_port = 8765
 
-    def build_status_payload(self) -> dict:
-        return {
-            "type":          "status",
-            "mode":          self.bot_state,
-            "uber":          int(round(self.uber_charge)),
-            "health":        self.health,
-            "target":        self.current_target or "",
-            "target_health": self.target_health,
-            "running":       self.running,
+        # --- Threading ---
+        self.bot_thread: Optional[threading.Thread] = None
+        self.ws_thread: Optional[threading.Thread] = None
+
+        # ------------------------------------------------------------------
+        # Weapon Switch Reversion (NEW)
+        # ------------------------------------------------------------------
+        self.weapon_switch_enabled = False
+        self.weapon_switch_delay = 3.0           # seconds before reverting
+        self.weapon_images_path = "weapons/"     # folder containing weapon PNGs
+        self.current_weapon: Optional[str] = None
+        self.weapon_change_detected = False
+        self.last_weapon_change_time = 0.0
+        self._last_weapon_check = 0.0
+
+        # Create weapons directory if missing
+        Path(self.weapon_images_path).mkdir(exist_ok=True)
+
+        # ------------------------------------------------------------------
+        # Configuration Defaults
+        # ------------------------------------------------------------------
+        self._init_default_config()
+
+    def _init_default_config(self):
+        """Set default configuration values."""
+        self.config = {
+            "healing": {
+                "priority": "critical",            # critical, distance, class_priority
+                "critical_threshold": 50,           # health percentage
+                "class_priority_list": [3, 4, 6, 2, 1, 5, 7, 8, 9],
+                "max_distance": 1000,
+                "beam_hold_time": 0.1
+            },
+            "movement": {
+                "enabled": True,
+                "follow_distance": 200,
+                "strafe_enabled": True
+            },
+            "uber": {
+                "auto_pop": True,
+                "pop_health_threshold": 40,
+                "pop_on_fire": True
+            },
+            "combat": {
+                "auto_attack": False,
+                "melee_range": 150
+            },
+            "vision": {
+                "confidence": 0.5,
+                "ocr_confidence": 0.7
+            },
+            "weapon_switch": {
+                "enabled": False,
+                "delay_seconds": 3.0,
+                "images_path": "weapons/"
+            }
         }
 
-    def send_status_sync(self, force: bool = False) -> None:
-        now = time.time()
-        if not force and now - self.last_status_push < self.status_push_interval:
-            return
-        self.last_status_push = now
-        self._queue_payload(self.build_status_payload())
-
-    # ─── Config helpers ───────────────────────────────────────────────────────
-
-    def get_config_value(self, *path, default=None):
-        cur = self.config
-        for key in path:
-            if not isinstance(cur, dict) or key not in cur:
+    # ------------------------------------------------------------------
+    # Configuration Helpers
+    # ------------------------------------------------------------------
+    def get_config_value(self, *keys, default=None):
+        """Safely retrieve nested configuration values."""
+        value = self.config
+        for key in keys:
+            if isinstance(value, dict):
+                value = value.get(key)
+            else:
                 return default
-            cur = cur[key]
-        return cur
+            if value is None:
+                return default
+        return value
 
-    def get_return_to_spawn_delay(self) -> float:
-        raw = self.get_config_value("follow_behavior", "search_timeout", default=6)
-        try:
-            return max(1.0, float(raw))
-        except (TypeError, ValueError):
-            return 6.0
+    # ------------------------------------------------------------------
+    # Input Methods (Thread‑Safe)
+    # ------------------------------------------------------------------
+    def _tap(self, key: Union[str, Key, KeyCode], duration: float = 0.05):
+        """Press and release a key."""
+        with self.input_lock:
+            self.keyboard.press(key)
+            time.sleep(duration)
+            self.keyboard.release(key)
 
-    # ─── State helpers ────────────────────────────────────────────────────────
+    def _hold(self, key: Union[str, Key, KeyCode]):
+        """Press and hold a key."""
+        with self.input_lock:
+            self.keyboard.press(key)
 
-    def set_bot_state(self, new_state: str, activity_msg: str = "",
-                      audio_file: str = "none") -> None:
-        if self.bot_state == new_state:
-            return
-        self.bot_state = new_state
-        if activity_msg:
-            self.send_activity_sync(activity_msg, audio_file != "none", audio_file)
-        self.send_status_sync(force=True)
+    def _release(self, key: Union[str, Key, KeyCode]):
+        """Release a key."""
+        with self.input_lock:
+            self.keyboard.release(key)
 
-    def reset_runtime_tracking(self) -> None:
-        self.bot_state                 = "starting"
-        self.current_target            = None
-        self.target_health             = 100
-        self.health                    = 100
-        self.uber_charge               = 0.0
-        self.uber_ready                = False
-        self.uber_active               = False
-        self.uber_start_time           = None
-        self.heal_button_held          = False
-        self.last_environment_update   = 0.0
-        self.last_status_push          = 0.0
-        self.last_any_heal_target_time = 0.0
-        self.last_heal_weapon_select   = 0.0
-        self.last_spy_check_time       = 0.0
+    def _click(self, button: Button = Button.left, duration: float = 0.05):
+        """Click a mouse button."""
+        with self.input_lock:
+            self.mouse.press(button)
+            time.sleep(duration)
+            self.mouse.release(button)
 
-    # ─── Input helpers ────────────────────────────────────────────────────────
+    def _hold_click(self, button: Button = Button.left):
+        """Hold a mouse button."""
+        with self.input_lock:
+            self.mouse.press(button)
 
-    def select_heal_weapon(self, force: bool = False) -> None:
-        now = time.time()
-        if force or now - self.last_heal_weapon_select >= 1.0:
-            try:
-                self.keyboard.tap("2")
-            except Exception as exc:
-                print(f"[select_heal_weapon] {exc}")
-            self.last_heal_weapon_select = now
+    def _release_click(self, button: Button = Button.left):
+        """Release a mouse button."""
+        with self.input_lock:
+            self.mouse.release(button)
 
-    def press_heal_beam(self) -> None:
-        if not self.heal_button_held:
-            try:
-                self.mouse.press(Button.left)
-            except Exception as exc:
-                print(f"[press_heal_beam] {exc}")
-                return
-            self.heal_button_held = True
+    def _move_mouse_relative(self, dx: int, dy: int):
+        """Move mouse relative to current position."""
+        with self.input_lock:
+            self.mouse.move(dx, dy)
 
-    def release_heal_beam(self) -> None:
-        if self.heal_button_held:
+    def _move_mouse_absolute(self, x: int, y: int):
+        """Move mouse to absolute screen coordinates (using pynput)."""
+        # Note: pynput uses absolute coordinates if the OS allows.
+        # This is a simplified version; actual absolute positioning requires
+        # platform‑specific work. Use relative for now.
+        with self.input_lock:
+            self.mouse.position = (x, y)
+
+    def release_all_inputs(self):
+        """Release all held keys and mouse buttons."""
+        with self.input_lock:
+            # Movement keys
+            for key in ['w', 'a', 's', 'd', Key.ctrl_l, Key.shift, Key.space]:
+                try:
+                    self.keyboard.release(key)
+                except:
+                    pass
+            # Mouse buttons
             try:
                 self.mouse.release(Button.left)
-            except Exception as exc:
-                print(f"[release_heal_beam] {exc}")
-            self.heal_button_held = False
-
-    def release_all_inputs(self) -> None:
-        self.release_heal_beam()
-        for key in ("w", "a", "s", "d"):
-            try:
-                self.keyboard.release(key)
-            except Exception:
+            except:
                 pass
-        try:
-            self.keyboard.release(Key.space)
-        except Exception:
-            pass
-
-    def _tap(self, key) -> None:
-        try:
-            self.keyboard.tap(key)
-        except Exception as exc:
-            print(f"[_tap] {exc}")
-
-    def _release(self, key) -> None:
-        try:
-            self.keyboard.release(key)
-        except Exception as exc:
-            print(f"[_release] {exc}")
-
-    # ─── WebSocket handler ────────────────────────────────────────────────────
-
-    async def handle_ws(self, websocket) -> None:
-        self.ws = websocket
-        print("GUI connected.")
-        try:
-            async for message in websocket:
-                data     = json.loads(message)
-                msg_type = data.get("type")
-
-                if msg_type == "config":
-                    self.config      = data.get("config", data)
-                    self.follow_mode = str(
-                        self.get_config_value(
-                            "passive_mode", "default_mode_on_startup",
-                            default="active"
-                        )
-                    ).strip().lower()
-                    print("Config received.")
-
-                elif msg_type == "start":
-                    if not self.running:
-                        self.session_start = datetime.now()
-                        self.running       = True
-                        threading.Thread(
-                            target=self.bot_main_loop, daemon=True
-                        ).start()
-                        await self.send_activity("Bot started!")
-                        await websocket.send(json.dumps(self.build_status_payload()))
-                    else:
-                        await self.send_activity("Bot is already running.")
-
-                elif msg_type == "set_follow_mode":
-                    self.follow_mode = data.get("mode", "active")
-                    await self.send_activity(
-                        f"Follow mode → {self.follow_mode}", True, "mode_switch"
-                    )
-
-                elif msg_type == "stop":
-                    self.running = False
-                    self.release_all_inputs()
-                    self.bot_state = "standby"
-                    await self.send_activity("Bot stopped.")
-                    await websocket.send(json.dumps(self.build_status_payload()))
-
-                elif msg_type in {"ping", "test"}:
-                    await websocket.send(json.dumps({
-                        "type":    "pong",
-                        "msg":     "Bot server ready",
-                        "running": self.running,
-                        "mode":    self.bot_state,
-                        "uber":    int(round(self.uber_charge)),
-                    }))
-
-        except websockets.exceptions.ConnectionClosed:
-            print("GUI disconnected. Awaiting new connection.")
-        except Exception as exc:
-            print(f"WebSocket error: {exc}")
-        finally:
-            self.ws = None
-
-    # ─── Bot main loop ────────────────────────────────────────────────────────
-
-    def bot_main_loop(self) -> None:
-        self.reset_runtime_tracking()
-        self.release_all_inputs()
-        self.skip_intro()
-        self.enter_spawn()
-        self.equip_loadout()
-        self.send_status_sync(force=True)
-
-        vision_mode = self.vision is not None
-        if vision_mode:
-            self.send_activity_sync("Vision engine active – full HUD reading enabled.")
-        else:
-            self.send_activity_sync(
-                "No vision engine – running in basic follow mode "
-                "(W + heal beam held; medigun slot 2 selected)."
-            )
-
-        while self.running:
-            self.check_cpu_temp()
-            if self.cpu_overheat:
-                self.release_heal_beam()
-                self.set_bot_state("cooling_down", "CPU too hot. Pausing.")
-                time.sleep(1)
-                continue
-
-            self.update_environment()
-            self.handle_uber()
-
-            timeout             = self.get_return_to_spawn_delay()
-            time_without_target = time.time() - self.last_any_heal_target_time
-
-            if self.current_target:
-                self.set_bot_state("healing")
-                self.select_heal_weapon()
-                self.press_heal_beam()
-                self._release("s")
-                self._tap("w")
-                if self.target_health and self.target_health > 142:
-                    self._tap("s")
-
-            elif not vision_mode:
-                self.set_bot_state("healing")
-                self.select_heal_weapon()
-                self.press_heal_beam()
-                self._release("s")
-                self._tap("w")
-                self.check_spies()
-
-            elif time_without_target < timeout:
-                self.set_bot_state("searching", "Scanning for a target…")
-                self.release_heal_beam()
-                self._tap("w")
-                sweep = 8 if int(time_without_target * 4) % 2 == 0 else -8
-                try:
-                    self.mouse.move(sweep, 0)
-                except Exception:
-                    pass
-
-            else:
-                self.set_bot_state("returning_to_spawn",
-                                   "No target. Returning to spawn.")
-                self.release_heal_beam()
-                self._release("w")
-                self._tap("s")
-                drift = 4 if int(time.time() * 3) % 2 == 0 else -4
-                try:
-                    self.mouse.move(drift, 0)
-                except Exception:
-                    pass
-
-            if vision_mode:
-                self.check_spies()
-            self.send_status_sync()
-            time.sleep(0.05)
-
-        self.release_all_inputs()
-        self.set_bot_state("standby")
-        self.send_status_sync(force=True)
-
-    # ─── Startup routines ─────────────────────────────────────────────────────
-
-    def skip_intro(self) -> None:
-        if not self.vision:
-            time.sleep(3)
-            return
-        self.send_activity_sync("Checking for class-selection screen…")
-        time.sleep(2)
-        try:
-            frame      = self.vision.capture_screen()
-            brightness = frame.mean()
-        except Exception:
-            return
-        if brightness < 60:
-            h, w    = frame.shape[:2]
-            medic_x = int(w * 0.62)
-            medic_y = int(h * 0.55)
             try:
-                self.mouse.position = (medic_x, medic_y)
-                time.sleep(0.3)
-                self.mouse.click(Button.left)
-                time.sleep(0.4)
-                self.mouse.click(Button.left)
-            except Exception as exc:
-                print(f"[skip_intro] mouse error: {exc}")
-            self.send_activity_sync("Selected Medic class.")
-            time.sleep(1)
-        else:
-            self.send_activity_sync("Already in-game – skipping class select.")
+                self.mouse.release(Button.right)
+            except:
+                pass
 
-    def enter_spawn(self) -> None:
-        if not self.vision:
-            time.sleep(2)
-            return
-        self.send_activity_sync("Binding respawn key and respawning…")
-        self._tap("`")
-        time.sleep(0.5)
-        for ch in "bind F9 kill":
-            self._tap(ch)
-            time.sleep(0.04)
-        self._tap(Key.enter)
-        time.sleep(0.2)
-        self._tap("`")
-        time.sleep(0.3)
-        self._tap(Key.f9)
-        time.sleep(3)
-        self.send_activity_sync("Respawned at team spawn.")
-
-    def equip_loadout(self) -> None:
-        self.select_heal_weapon(force=True)
-        time.sleep(0.2)
-
-    # ─── Environment / HUD update ─────────────────────────────────────────────
-
-    def update_environment(self) -> None:
-        now = time.time()
-        if now - self.last_environment_update < self.environment_update_interval:
-            return
-        self.last_environment_update = now
-        if not self.vision:
-            return
+    # ------------------------------------------------------------------
+    # Vision & Game State (Placeholders – Replace with your logic)
+    # ------------------------------------------------------------------
+    def _capture_screen(self) -> np.ndarray:
+        """Capture the primary monitor and return as BGR numpy array."""
         try:
-            snapshot = self.vision.read_hud_snapshot()
-        except Exception as exc:
-            print(f"[update_environment] Vision error: {exc}")
-            return
+            img = self.sct.grab(self.monitor)
+            return np.array(img)[:, :, :3]  # BGRA -> BGR
+        except Exception as e:
+            logger.error(f"Screen capture failed: {e}")
+            return np.zeros((self.screen_height, self.screen_width, 3), dtype=np.uint8)
 
-        if not snapshot.ocr_available and not self.warned_about_ocr:
-            self.warned_about_ocr = True
-            self.send_activity_sync(
-                "Tesseract OCR not found – HUD reading disabled. "
-                "Install Tesseract to enable full auto-targeting."
+    def _load_vision_models(self):
+        """Load YOLO and OCR models. (Replace with your actual loading code)."""
+        # Example: self.yolo_model = YOLO("models/players.pt")
+        # Example: pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        logger.info("Vision models loaded (placeholders).")
+
+    def _detect_players(self, frame: np.ndarray) -> List[Player]:
+        """
+        Run YOLO detection and OCR health reading.
+        REPLACE THIS with your actual detection pipeline.
+        """
+        players = []
+        # --- Stub: simulate detection ---
+        # In a real implementation, you would:
+        #   results = self.yolo_model(frame)
+        #   for box in results[0].boxes:
+        #       class_id = int(box.cls)
+        #       x1, y1, x2, y2 = box.xyxy[0].tolist()
+        #       # Crop region and run OCR for health
+        #       health_text = pytesseract.image_to_string(crop, config='--psm 7')
+        #       # Parse health numbers...
+        return players
+
+    def _detect_uber_percent(self, frame: np.ndarray) -> float:
+        """Read uber percentage from HUD using OCR. Replace with your code."""
+        # Stub: return random value for testing
+        return min(100.0, self.uber_percent + random.uniform(0, 0.8))
+
+    def _detect_local_player(self, frame: np.ndarray) -> Optional[Player]:
+        """Determine local player position (usually center of screen)."""
+        # For a bot, local player is always at the crosshair.
+        # You may want to read health/class from HUD OCR.
+        if self.local_player is None:
+            self.local_player = Player(
+                x=self.screen_width // 2,
+                y=self.screen_height // 2,
+                health=150,
+                max_health=150,
+                class_id=PlayerClass.MEDIC.value
             )
+        return self.local_player
 
-        if snapshot.health is not None:
-            self.health = snapshot.health
-        if snapshot.heal_target_health is not None:
-            self.target_health = snapshot.heal_target_health
-        if snapshot.uber_charge is not None:
-            self.uber_charge = snapshot.uber_charge
-        if snapshot.heal_target_name:
-            self.current_target            = snapshot.heal_target_name
-            self.last_any_heal_target_time = now
-        else:
-            self.current_target = None
+    def update_environment(self):
+        """Capture screen and update all game state."""
+        frame = self._capture_screen()
+        self.players = self._detect_players(frame)
+        self.local_player = self._detect_local_player(frame)
+        self.uber_percent = self._detect_uber_percent(frame)
 
-        if self.health <= 0:
-            self.send_activity_sync("Backstabbed!", True, "spy")
-
-    # ─── Uber management ─────────────────────────────────────────────────────
-
-    def handle_uber(self) -> None:
-        if self.uber_active:
-            if time.time() - self.uber_start_time > 8:
-                self.uber_active = False
-                self.send_activity_sync("Uber ended.", True, "uber_cooldown")
-            return
-
-        if self.uber_charge >= 100 and not self.uber_ready:
-            self.uber_ready = True
-            self.send_activity_sync("Uber ready!", True, "uber_ready")
-
-        ub_behavior = self.config.get("uber_behavior", "Manual")
-        threshold   = 30
-        try:
-            threshold = int(
-                self.get_config_value(
-                    "uber", "auto_pop_health_threshold", default=30
+        # Calculate distances from local player
+        if self.local_player:
+            lx, ly = self.local_player.x, self.local_player.y
+            for p in self.players:
+                p.distance = math.hypot(p.x - lx, p.y - ly)
+                p.is_critical = (p.health / p.max_health * 100) < self.get_config_value(
+                    "healing", "critical_threshold", default=50
                 )
-            )
-        except (TypeError, ValueError):
-            pass
 
-        if ub_behavior == "Auto-pop" and self.target_health < threshold and self.uber_ready:
-            self.pop_uber()
-        elif ub_behavior == "Suggest" and self.current_target and self.uber_ready:
-            self.send_activity_sync("Suggesting Uber!", True, "uber_ready")
+    # ------------------------------------------------------------------
+    # Healing Logic
+    # ------------------------------------------------------------------
+    def find_heal_target(self) -> Optional[Player]:
+        """Select best player to heal based on configured priority."""
+        if not self.players:
+            return None
 
-    def pop_uber(self) -> None:
-        self.select_heal_weapon(force=True)
-        try:
-            self.mouse.click(Button.right)
-        except Exception as exc:
-            print(f"[pop_uber] {exc}")
-        self.uber_ready      = False
-        self.uber_active     = True
-        self.uber_charge     = 0
-        self.uber_start_time = time.time()
-        self.send_activity_sync("Uber activated!", True, "uber_activated")
+        priority_mode = self.get_config_value("healing", "priority", default="critical")
+        max_dist = self.get_config_value("healing", "max_distance", default=1000)
 
-    # ─── Spy check ───────────────────────────────────────────────────────────
+        # Filter by distance
+        candidates = [p for p in self.players if p.distance <= max_dist]
+        if not candidates:
+            return None
 
-    def check_spies(self) -> None:
-        freq = self.config.get("spy_check_frequency", 10)
-        try:
-            freq = max(1, int(freq))
-        except (TypeError, ValueError):
-            freq = 10
+        if priority_mode == "critical":
+            # Sort by health percentage ascending, then distance
+            candidates.sort(key=lambda p: (p.health / p.max_health, p.distance))
+            return candidates[0]
+        elif priority_mode == "distance":
+            return min(candidates, key=lambda p: p.distance)
+        elif priority_mode == "class_priority":
+            class_order = self.get_config_value("healing", "class_priority_list")
+            for cls in class_order:
+                for p in candidates:
+                    if p.class_id == cls:
+                        return p
+            return min(candidates, key=lambda p: p.health / p.max_health)
+        else:
+            return candidates[0]
 
-        now = time.time()
-        if now - self.last_spy_check_time < freq:
+    def aim_at_target(self, target: Player):
+        """Move crosshair toward target (simple relative movement)."""
+        if not self.local_player:
+            return
+        dx = target.x - self.local_player.x
+        dy = target.y - self.local_player.y
+        # Scale movement (adjust sensitivity)
+        self._move_mouse_relative(int(dx * 0.5), int(dy * 0.5))
+
+    def handle_uber(self):
+        """Auto‑pop uber if conditions are met."""
+        if self.uber_percent < 100 or self.uber_active:
+            return
+        if not self.get_config_value("uber", "auto_pop", default=True):
             return
 
-        self.last_spy_check_time = now
-        flick = int(
-            self.get_config_value(
-                "spy_detection", "spy_check_camera_flick_speed", default=180
-            )
-        )
-        try:
-            self.mouse.move(flick, 0)
-            time.sleep(0.05)
-            self.mouse.move(-flick, 0)
-        except Exception as exc:
-            print(f"[check_spies] mouse error: {exc}")
+        # Check for critical teammate nearby
+        pop_threshold = self.get_config_value("uber", "pop_health_threshold", default=40)
+        for p in self.players:
+            if p.health < pop_threshold and p.distance < 400:
+                self._click(Button.right)  # Uber activation
+                self.uber_active = True
+                self.set_bot_state(BotState.UBER_ACTIVE, "Uber popped!")
+                logger.info("🚨 UBER ACTIVATED!")
+                return
 
-    # ─── System ──────────────────────────────────────────────────────────────
+    # ------------------------------------------------------------------
+    # Weapon Switch Reversion (NEW)
+    # ------------------------------------------------------------------
+    def _get_weapon_image_map(self) -> Dict[str, str]:
+        """Return mapping of weapon names to image file paths."""
+        return {
+            # Primary - Syringe Guns
+            "syringe_gun": os.path.join(self.weapon_images_path, "syringe_gun.png"),
+            "blutsauger": os.path.join(self.weapon_images_path, "blutsauger.png"),
+            "crusaders_crossbow": os.path.join(self.weapon_images_path, "crusaders_crossbow.png"),
+            "overdose": os.path.join(self.weapon_images_path, "overdose.png"),
+            # Secondary - Mediguns
+            "medigun": os.path.join(self.weapon_images_path, "medigun.png"),
+            "kritzkrieg": os.path.join(self.weapon_images_path, "kritzkrieg.png"),
+            "quick_fix": os.path.join(self.weapon_images_path, "quick_fix.png"),
+            "vaccinator": os.path.join(self.weapon_images_path, "vaccinator.png"),
+            # Melee
+            "bonesaw": os.path.join(self.weapon_images_path, "bonesaw.png"),
+            "ubersaw": os.path.join(self.weapon_images_path, "ubersaw.png"),
+            "vita_saw": os.path.join(self.weapon_images_path, "vita_saw.png"),
+            "amputator": os.path.join(self.weapon_images_path, "amputator.png"),
+            "solemn_vow": os.path.join(self.weapon_images_path, "solemn_vow.png"),
+        }
 
-    def check_cpu_temp(self) -> None:
+    def detect_current_weapon(self) -> Optional[str]:
+        """Scan the screen for a weapon HUD icon and return its name."""
+        if not self.weapon_switch_enabled:
+            return None
+
+        for weapon_name, img_path in self._get_weapon_image_map().items():
+            if not os.path.exists(img_path):
+                continue
+            try:
+                # confidence 0.8 works well; adjust if needed
+                location = pyautogui.locateOnScreen(img_path, confidence=0.8)
+                if location is not None:
+                    return weapon_name
+            except Exception as e:
+                logger.debug(f"Weapon detection error {weapon_name}: {e}")
+        return None
+
+    def revert_weapon_loadout(self, old_weapon: str, new_weapon: str):
+        """
+        Open loadout menu (M), click old weapon slot, then new weapon slot,
+        and close the menu. Temporarily pauses bot actions.
+        """
+        if not self.weapon_switch_enabled:
+            return
+
+        logger.info(f"🔄 Reverting weapon: {new_weapon} → {old_weapon}")
+        self.release_all_inputs()
+        self.set_bot_state(BotState.SWITCHING_LOADOUT, "Weapon reversion")
+
+        # Open loadout (default key M)
+        self._tap("m")
+        time.sleep(0.8)
+
+        # Click old weapon slot (equip)
+        old_img = os.path.join(self.weapon_images_path, f"{old_weapon}.png")
+        if os.path.exists(old_img):
+            try:
+                pos = pyautogui.locateCenterOnScreen(old_img, confidence=0.8)
+                if pos:
+                    pyautogui.click(pos)
+                    time.sleep(0.3)
+                else:
+                    logger.warning(f"Could not locate {old_weapon} in loadout.")
+            except Exception as e:
+                logger.error(f"Error clicking {old_weapon}: {e}")
+
+        # Click new weapon slot (unequip)
+        new_img = os.path.join(self.weapon_images_path, f"{new_weapon}.png")
+        if os.path.exists(new_img):
+            try:
+                pos = pyautogui.locateCenterOnScreen(new_img, confidence=0.8)
+                if pos:
+                    pyautogui.click(pos)
+                    time.sleep(0.3)
+                else:
+                    logger.warning(f"Could not locate {new_weapon} in loadout.")
+            except Exception as e:
+                logger.error(f"Error clicking {new_weapon}: {e}")
+
+        # Close loadout
+        self._tap("m")
+        time.sleep(0.5)
+
+        self.set_bot_state(BotState.ACTIVE, "Weapon reverted")
+        self.send_activity_sync(f"Weapon reverted to {old_weapon}")
+
+    def check_weapon_switch(self):
+        """Periodic check for weapon changes; trigger reversion if needed."""
+        if not self.weapon_switch_enabled:
+            return
+
+        now = time.time()
+        if now - self._last_weapon_check < 0.5:
+            return
+        self._last_weapon_check = now
+
+        detected = self.detect_current_weapon()
+        if detected is None:
+            return
+
+        if self.current_weapon is None:
+            self.current_weapon = detected
+            return
+
+        if detected != self.current_weapon:
+            if not self.weapon_change_detected:
+                self.weapon_change_detected = True
+                self.last_weapon_change_time = now
+                logger.info(f"Weapon changed: {self.current_weapon} → {detected}")
+        else:
+            self.weapon_change_detected = False
+
+        if (self.weapon_change_detected and
+            now - self.last_weapon_change_time >= self.weapon_switch_delay):
+            self.revert_weapon_loadout(self.current_weapon, detected)
+            # Update current weapon after reversion
+            self.current_weapon = self.detect_current_weapon() or detected
+            self.weapon_change_detected = False
+
+    # ------------------------------------------------------------------
+    # CPU Temperature Monitoring
+    # ------------------------------------------------------------------
+    def check_cpu_temp(self):
+        """Read CPU temperature using psutil."""
         try:
             temps = psutil.sensors_temperatures()
-            if temps and "coretemp" in temps:
-                highest   = max(t.current for t in temps["coretemp"])
-                threshold = float(
-                    self.get_config_value(
-                        "performance", "cpu_temperature_throttle_threshold",
-                        default=85
-                    )
-                )
-                self.cpu_overheat = highest > threshold
-        except Exception:
-            pass
+            if 'coretemp' in temps:
+                self.cpu_temp = max(t.current for t in temps['coretemp'])
+            elif 'cpu-thermal' in temps:
+                self.cpu_temp = temps['cpu-thermal'][0].current
+            else:
+                self.cpu_temp = 0.0
+        except:
+            self.cpu_temp = 0.0
 
-    # ─── Server entry-point ───────────────────────────────────────────────────
+        self.cpu_overheat = self.cpu_temp >= self.temp_limit
+        if self.cpu_overheat:
+            logger.warning(f"🔥 CPU overheating: {self.cpu_temp:.1f}°C")
 
-    async def run_server(self) -> None:
-        print("Bot WebSocket server running on port 8765")
-        async with websockets.serve(self.handle_ws, "0.0.0.0", 8765):
-            await asyncio.Future()
+    # ------------------------------------------------------------------
+    # Bot State Management
+    # ------------------------------------------------------------------
+    def set_bot_state(self, state: BotState, reason: str = ""):
+        """Update bot state and notify WebSocket clients."""
+        if self.bot_state != state:
+            logger.info(f"State: {self.bot_state.value} → {state.value} ({reason})")
+        self.bot_state = state
+        self.send_status_sync()
 
-    def run(self) -> None:
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(self.run_server())
+    # ------------------------------------------------------------------
+    # WebSocket Communication
+    # ------------------------------------------------------------------
+    async def _broadcast(self, message: str):
+        """Send message to all connected WebSocket clients."""
+        if not self.ws_clients:
+            return
+        # Use asyncio.gather to send concurrently
+        await asyncio.gather(
+            *[client.send(message) for client in self.ws_clients],
+            return_exceptions=True
+        )
 
+    def send_status_sync(self):
+        """Synchronous wrapper to broadcast status from bot thread."""
+        if not self.ws_clients:
+            return
+        data = {
+            "type": "status_update",
+            "state": self.bot_state.value,
+            "uber_percent": round(self.uber_percent, 1),
+            "cpu_temp": round(self.cpu_temp, 1),
+            "players": len(self.players),
+            "weapon": self.current_weapon
+        }
+        asyncio.run_coroutine_threadsafe(
+            self._broadcast(json.dumps(data)),
+            asyncio.get_event_loop()
+        )
 
-# ══════════════════════════════════════════════════════════════════════════════
+    def send_activity_sync(self, activity: str):
+        """Send an activity log message to clients."""
+        if not self.ws_clients:
+            return
+        data = {"type": "activity", "message": activity}
+        asyncio.run_coroutine_threadsafe(
+            self._broadcast(json.dumps(data)),
+            asyncio.get_event_loop()
+        )
+
+    async def ws_handler(self, websocket: WebSocketServerProtocol, path: str):
+        """Handle individual WebSocket connection."""
+        self.ws_clients.append(websocket)
+        client_id = id(websocket)
+        logger.info(f"🔌 Client connected (id={client_id})")
+
+        try:
+            async for message in websocket:
+                try:
+                    data = json.loads(message)
+                    await self._process_ws_message(websocket, data)
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON: {message}")
+        except websockets.exceptions.ConnectionClosed:
+            logger.info(f"🔌 Client disconnected (id={client_id})")
+        finally:
+            self.ws_clients.remove(websocket)
+
+    async def _process_ws_message(self, websocket: WebSocketServerProtocol, data: Dict[str, Any]):
+        """Route incoming WebSocket messages."""
+        msg_type = data.get("type")
+
+        if msg_type == "start":
+            self.start_bot()
+            await websocket.send(json.dumps({"type": "status", "running": self.running}))
+
+        elif msg_type == "stop":
+            self.stop_bot()
+            await websocket.send(json.dumps({"type": "status", "running": self.running}))
+
+        elif msg_type == "config":
+            # Update configuration
+            new_config = data.get("config", {})
+            self._update_config(new_config)
+            logger.info("Configuration updated")
+            await websocket.send(json.dumps({"type": "config_ack", "status": "ok"}))
+
+        elif msg_type == "get_status":
+            await websocket.send(json.dumps({
+                "type": "status",
+                "running": self.running,
+                "state": self.bot_state.value,
+                "uber_percent": self.uber_percent,
+                "cpu_temp": self.cpu_temp,
+                "players": len(self.players)
+            }))
+
+        elif msg_type == "set_weapon":
+            # Force weapon switch (for testing)
+            weapon = data.get("weapon")
+            if weapon:
+                logger.info(f"Manual weapon override: {weapon}")
+                self.current_weapon = weapon
+
+    def _update_config(self, new_config: Dict[str, Any]):
+        """Deep merge new configuration into self.config."""
+        def merge(a, b):
+            for key in b:
+                if key in a and isinstance(a[key], dict) and isinstance(b[key], dict):
+                    merge(a[key], b[key])
+                else:
+                    a[key] = b[key]
+        merge(self.config, new_config)
+
+        # Extract weapon‑switch settings
+        self.weapon_switch_enabled = bool(self.get_config_value("weapon_switch", "enabled", default=False))
+        self.weapon_switch_delay = float(self.get_config_value("weapon_switch", "delay_seconds", default=3.0))
+        self.weapon_images_path = str(self.get_config_value("weapon_switch", "images_path", default="weapons/"))
+        Path(self.weapon_images_path).mkdir(exist_ok=True)
+
+        # Update other runtime settings
+        self.temp_limit = float(self.get_config_value("system", "temp_limit", default=85.0))
+
+    # ------------------------------------------------------------------
+    # Main Bot Loop (Runs in separate thread)
+    # ------------------------------------------------------------------
+    def bot_main_loop(self):
+        """Primary bot logic."""
+        logger.info("🤖 Bot thread started")
+        self._load_vision_models()
+
+        while self.running:
+            try:
+                # Thermal throttle
+                self.check_cpu_temp()
+                if self.cpu_overheat:
+                    self.release_all_inputs()
+                    time.sleep(1.0)
+                    continue
+
+                # Update game state (vision)
+                self.update_environment()
+
+                # Uber management
+                self.handle_uber()
+
+                # Only perform healing if not switching loadout
+                if self.bot_state != BotState.SWITCHING_LOADOUT:
+                    target = self.find_heal_target()
+                    if target:
+                        self.set_bot_state(BotState.HEALING, f"Healing class {target.class_id}")
+                        self.aim_at_target(target)
+                        self._hold_click(Button.left)   # Medigun beam
+                    else:
+                        self.set_bot_state(BotState.SEARCHING, "No targets")
+                        self._release_click(Button.left)
+
+                # Check for unwanted weapon switches
+                self.check_weapon_switch()
+
+                # Periodic status broadcast
+                self.send_status_sync()
+
+                time.sleep(0.05)  # ~20 Hz
+
+            except Exception as e:
+                logger.exception(f"Error in bot loop: {e}")
+                time.sleep(0.5)
+
+        # Cleanup
+        self.release_all_inputs()
+        logger.info("🤖 Bot thread stopped")
+
+    # ------------------------------------------------------------------
+    # Bot Control
+    # ------------------------------------------------------------------
+    def start_bot(self):
+        """Start the bot thread."""
+        if self.running:
+            return
+        self.running = True
+        self.bot_state = BotState.ACTIVE
+        self.bot_thread = threading.Thread(target=self.bot_main_loop, daemon=True)
+        self.bot_thread.start()
+        self.send_activity_sync("Bot started")
+
+    def stop_bot(self):
+        """Stop the bot thread."""
+        self.running = False
+        if self.bot_thread and self.bot_thread.is_alive():
+            self.bot_thread.join(timeout=2.0)
+        self.bot_state = BotState.IDLE
+        self.release_all_inputs()
+        self.send_activity_sync("Bot stopped")
+
+    # ------------------------------------------------------------------
+    # WebSocket Server
+    # ------------------------------------------------------------------
+    async def _run_ws_server(self):
+        """Async WebSocket server runner."""
+        self.ws_server = await serve(self.ws_handler, self.ws_host, self.ws_port)
+        logger.info(f"🌐 WebSocket server running on ws://{self.ws_host}:{self.ws_port}")
+        await self.ws_server.wait_closed()
+
+    def _ws_thread_target(self):
+        """Thread target for WebSocket server."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._run_ws_server())
+        except Exception as e:
+            logger.error(f"WebSocket server error: {e}")
+        finally:
+            loop.close()
+
+    def start(self):
+        """Start WebSocket server and prepare bot."""
+        self.ws_thread = threading.Thread(target=self._ws_thread_target, daemon=True)
+        self.ws_thread.start()
+        logger.info("Medic-AI Bot Server ready.")
+
+    def shutdown(self):
+        """Clean shutdown of all components."""
+        logger.info("Shutting down...")
+        self.stop_bot()
+        if self.ws_server:
+            self.ws_server.close()
+        # Give threads a moment to finish
+        time.sleep(0.5)
+        logger.info("Server stopped.")
+
+# ----------------------------------------------------------------------
+# Entry Point
+# ----------------------------------------------------------------------
+def main():
+    bot = MedicBot()
+    bot.start()
+
+    try:
+        # Keep main thread alive
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n🛑 Shutdown requested.")
+        bot.shutdown()
+        sys.exit(0)
 
 if __name__ == "__main__":
-    bot = MedicAIBot()
-    bot.run()
+    main()
