@@ -1,7 +1,9 @@
 """
-bot_server.py  –  MedicAI WebSocket bot server
-================================================
-Run directly:   python bot/bot_server.py
+bot_server.py  –  MedicAI WebSocket bot server  (all-in-one)
+=============================================================
+vision_engine.py and watchdog.py are merged into this file.
+
+Run directly:   python bot_server.py
 Or via start.bat / start_server.bat.
 
 The GUI connects on ws://localhost:8765 and sends JSON messages to control
@@ -11,35 +13,380 @@ WebSocket handler stays responsive.
 Vision is *optional*: if mss / cv2 / pytesseract are not installed the bot
 still runs – it holds W and the heal beam so it at least keeps moving forward
 and firing the medigun.  Full auto-targeting requires Tesseract OCR to be
-installed and the vision_engine dependencies present.
+installed and the optional vision dependencies present.
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
+import os
+import subprocess
 import time
 import threading
+from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Optional
 
 import psutil
 import websockets
 import websockets.exceptions
 
-# ── optional vision & watchdog ───────────────────────────────────────────────
-try:
-    from vision_engine import VisionEngine
-except (ImportError, Exception):
-    VisionEngine = None
-
-try:
-    from watchdog import WatchdogProcess
-except (ImportError, Exception):
-    WatchdogProcess = None
-
 from pynput.keyboard import Controller as KeyboardController, Key
 from pynput.mouse    import Controller as MouseController, Button
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# ░░  VISION ENGINE  (formerly vision_engine.py)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class HudSnapshot:
+    """What bot_main_loop reads from the HUD each tick."""
+    health:             Optional[int]   = None
+    heal_target_health: Optional[int]   = None
+    uber_charge:        Optional[float] = None
+    heal_target_name:   Optional[str]   = None
+    ocr_available:      bool            = False
+
+
+class VisionEngine:
+    """
+    Screen-capture + HUD-reading back-end.
+
+    Dependency chain (all optional – degrades gracefully):
+        mss          – screen capture
+        cv2 / numpy  – image processing
+        pytesseract  – OCR for HP / name / Uber text
+    """
+
+    # TF2 default 1080p HUD regions  (left, top, width, height)
+    _REGION_HEALTH      = (45,  880, 120, 55)
+    _REGION_TARGET_HP   = (700, 840, 160, 50)
+    _REGION_TARGET_NAME = (620, 800, 320, 40)
+    _REGION_UBER        = (765, 890, 130, 35)
+
+    def __init__(self) -> None:
+        self.sct   = None
+        self.model = None          # reserved for future YOLO integration
+        self._ocr_available = False
+        self._np   = None
+        self._cv2  = None
+        self._tess = None
+        self._init_libs()
+
+    # ── initialisation ───────────────────────────────────────────────────────
+
+    def _init_libs(self) -> None:
+        try:
+            import mss as _mss
+            self.sct = _mss.mss()
+        except ImportError:
+            return
+
+        try:
+            import numpy as _np
+            import cv2 as _cv2
+            self._np  = _np
+            self._cv2 = _cv2
+        except ImportError:
+            return
+
+        try:
+            import pytesseract as _tess
+            _tess.get_tesseract_version()
+            self._tess = _tess
+            self._ocr_available = True
+        except Exception:
+            self._tess = None
+            self._ocr_available = False
+
+    # ── public API ───────────────────────────────────────────────────────────
+
+    def capture_screen(self):
+        """Return a BGR numpy array of the primary monitor, or a blank frame."""
+        np = self._np
+        cv2 = self._cv2
+
+        if self.sct is None or np is None or cv2 is None:
+            try:
+                import numpy as _np
+                return _np.zeros((1080, 1920, 3), dtype=_np.uint8)
+            except ImportError:
+                return None
+
+        monitor = self.sct.monitors[1]
+        raw = self.sct.grab(monitor)
+        frame = np.array(raw)
+        return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+
+    def read_hud_snapshot(self) -> HudSnapshot:
+        snap = HudSnapshot(ocr_available=self._ocr_available)
+        if not self._ocr_available:
+            return snap
+
+        frame = self.capture_screen()
+        if frame is None:
+            return snap
+
+        snap.health             = self._read_int_region(frame, self._REGION_HEALTH)
+        snap.heal_target_health = self._read_int_region(frame, self._REGION_TARGET_HP)
+        snap.uber_charge        = self._read_float_region(frame, self._REGION_UBER)
+        snap.heal_target_name   = self._read_text_region(frame, self._REGION_TARGET_NAME)
+        return snap
+
+    # ── private helpers ──────────────────────────────────────────────────────
+
+    def _crop(self, frame, region):
+        x, y, w, h = region
+        return frame[y:y + h, x:x + w]
+
+    def _ocr_int(self, roi) -> Optional[int]:
+        cv2, tess = self._cv2, self._tess
+        if roi is None or cv2 is None:
+            return None
+        gray    = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        _, bw   = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        cfg     = "--psm 8 --oem 1 -c tessedit_char_whitelist=0123456789"
+        raw     = tess.image_to_string(bw, config=cfg).strip()
+        digits  = "".join(ch for ch in raw if ch.isdigit())
+        return int(digits) if digits else None
+
+    def _read_int_region(self, frame, region) -> Optional[int]:
+        try:
+            return self._ocr_int(self._crop(frame, region))
+        except Exception:
+            return None
+
+    def _read_float_region(self, frame, region) -> Optional[float]:
+        val = self._read_int_region(frame, region)
+        return float(val) if val is not None else None
+
+    def _read_text_region(self, frame, region) -> Optional[str]:
+        if not self._ocr_available or self._cv2 is None:
+            return None
+        try:
+            roi  = self._crop(frame, region)
+            gray = self._cv2.cvtColor(roi, self._cv2.COLOR_BGR2GRAY)
+            cfg  = "--psm 7 --oem 1"
+            text = self._tess.image_to_string(gray, config=cfg).strip()
+            return text if text else None
+        except Exception:
+            return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ░░  WATCHDOG  (formerly watchdog.py)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class WatchdogProcess:
+    """Monitors the TF2 process and calls back on crash."""
+
+    def __init__(self, executable: str = "hl2.exe") -> None:
+        self.executable  = executable
+        self.tf2_process = None
+
+    def start_game(self, server_ip: Optional[str] = None) -> None:
+        cmd = ["steam", "-applaunch", "440"]
+        if server_ip:
+            cmd.extend(["+connect", server_ip])
+        print(f"Watchdog: Starting TF2 with {cmd}")
+        subprocess.Popen(cmd)
+        time.sleep(15)
+        self.find_process()
+
+    def find_process(self) -> bool:
+        for proc in psutil.process_iter(["name", "pid"]):
+            if proc.info["name"] == self.executable:
+                self.tf2_process = proc
+                return True
+        self.tf2_process = None
+        return False
+
+    def is_running(self) -> bool:
+        if self.tf2_process:
+            return self.tf2_process.is_running()
+        return self.find_process()
+
+    def monitor_loop(self, callback_on_crash) -> None:
+        while True:
+            if not self.is_running():
+                print("Watchdog: TF2 crash detected!")
+                callback_on_crash()
+            time.sleep(5)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ░░  MEDIC-VISION CLASSIC  (legacy – used by test_vision.py)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class MedicVisionClassic:
+    """Template-matching vision loop (test / debug use)."""
+
+    def __init__(self, ws_sender) -> None:
+        self.ws_sender       = ws_sender
+        self.resolution      = (1920, 1080)
+        self.template_path   = "templates/medic_call.png"
+        self.match_threshold = 0.68
+        self.spin_speed      = 6
+        self.aim_sensitivity = 0.58
+        self.heal_offset_y   = +40
+        self.priority_names: set = set()
+
+        self.team_lower = None
+        self.team_upper = None
+        try:
+            import numpy as np
+            self.team_lower = np.array([95, 80, 80])
+            self.team_upper = np.array([130, 255, 255])
+        except ImportError:
+            pass
+
+        try:
+            import cv2
+            self.medic_template = cv2.imread(self.template_path, cv2.IMREAD_COLOR)
+            if self.medic_template is None:
+                raise FileNotFoundError(
+                    f"Template not found: {self.template_path}\n"
+                    "Place 'medic_call.png' inside a 'templates/' folder."
+                )
+            self.template_h, self.template_w = self.medic_template.shape[:2]
+        except ImportError:
+            raise RuntimeError("cv2 (opencv-python) is required for MedicVisionClassic.")
+
+        self.locked_target         = None
+        self.target_history        = deque(maxlen=15)
+        self.spinning              = True
+        self.last_medic_time       = 0.0
+        self.last_seen_target_time = 0.0
+        print("MedicVisionClassic loaded")
+
+    async def send_command(self, command: str, data=None) -> None:
+        msg = {"type": command}
+        if data:
+            msg["data"] = data
+        try:
+            await self.ws_sender(json.dumps(msg))
+        except Exception:
+            pass
+
+    def update_config(self, config_data: dict) -> None:
+        if "priority_names" in config_data:
+            self.priority_names = {n.lower().strip() for n in config_data["priority_names"]}
+
+    def capture_screen(self):
+        import mss
+        import numpy as np
+        import cv2
+        with mss.mss() as sct:
+            mon = {"top": 0, "left": 0,
+                   "width": self.resolution[0], "height": self.resolution[1]}
+            img = np.array(sct.grab(mon))
+            return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+
+    def detect_medic_calls(self, frame):
+        import cv2
+        import numpy as np
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        tmpl = cv2.cvtColor(self.medic_template, cv2.COLOR_BGR2GRAY)
+        res  = cv2.matchTemplate(gray, tmpl, cv2.TM_CCOEFF_NORMED)
+        locs = np.where(res >= self.match_threshold)
+        calls = []
+        for pt in zip(*locs[::-1]):
+            cx = pt[0] + self.template_w // 2
+            cy = pt[1] + self.template_h // 2 - 25
+            calls.append((cx, cy))
+        return calls
+
+    def find_target_below(self, frame, cross_pos):
+        if self.team_lower is None or self.team_upper is None:
+            return None
+        import cv2
+        x, y   = cross_pos
+        roi_y1 = max(0, y + 25)
+        roi_y2 = min(frame.shape[0], y + 240)
+        roi_x1 = max(0, x - 80)
+        roi_x2 = min(frame.shape[1], x + 80)
+        if roi_y1 >= roi_y2 or roi_x1 >= roi_x2:
+            return None
+        roi  = frame[roi_y1:roi_y2, roi_x1:roi_x2]
+        hsv  = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, self.team_lower, self.team_upper)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+        largest = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(largest) < 400:
+            return None
+        m = cv2.moments(largest)
+        if m["m00"] == 0:
+            return None
+        cx = int(m["m10"] / m["m00"]) + roi_x1
+        cy = int(m["m01"] / m["m00"]) + roi_y1 + 25
+        return (cx, cy)
+
+    async def run(self) -> None:
+        import cv2
+        print("Vision loop started – waiting for medic calls…")
+        while True:
+            frame = self.capture_screen()
+            debug = frame.copy()
+            calls = self.detect_medic_calls(frame)
+            if calls:
+                for i, cross in enumerate(calls):
+                    cv2.circle(debug, cross, 18, (0, 0, 255), 4)
+                    cv2.putText(debug, f"MEDIC CALL {i+1}",
+                                (cross[0] - 60, cross[1] - 35),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            if self.locked_target:
+                tx, ty = self.locked_target
+                cv2.circle(debug, (tx, ty), 25, (0, 255, 0), 4)
+                cv2.putText(debug, "LOCKED TARGET", (tx - 80, ty - 45),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            cv2.imshow("Medic Bot Debug", debug)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+            if self.locked_target is None:
+                if self.spinning:
+                    await self.send_command("mouse_move", {"dx": self.spin_speed, "dy": 0})
+                if calls and (time.time() - self.last_medic_time > 0.7):
+                    cross      = min(calls, key=lambda p: p[1])
+                    target_pos = self.find_target_below(frame, cross)
+                    if target_pos:
+                        self.locked_target         = target_pos
+                        self.spinning              = False
+                        self.last_medic_time       = time.time()
+                        self.last_seen_target_time = time.time()
+                        await self.send_command("medic_locked")
+            else:
+                target_pos = self.find_target_below(frame, self.locked_target)
+                if target_pos:
+                    self.locked_target         = target_pos
+                    self.last_seen_target_time = time.time()
+                    screen_cx = frame.shape[1] // 2
+                    screen_cy = frame.shape[0] // 2 + self.heal_offset_y
+                    dx = target_pos[0] - screen_cx
+                    dy = target_pos[1] - screen_cy
+                    await self.send_command("mouse_move", {
+                        "dx": int(dx * self.aim_sensitivity),
+                        "dy": int(dy * self.aim_sensitivity),
+                    })
+                elif time.time() - self.last_seen_target_time > 5.0:
+                    self.locked_target = None
+                    self.spinning      = True
+                    await self.send_command("medic_unlocked")
+            await asyncio.sleep(0.01)
+
+
+async def start_vision(ws_sender) -> None:
+    vision = MedicVisionClassic(ws_sender)
+    await vision.run()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ░░  BOT SERVER
+# ══════════════════════════════════════════════════════════════════════════════
 
 class MedicAIBot:
 
@@ -71,9 +418,6 @@ class MedicAIBot:
         self.status_push_interval    = 0.5
         self.last_any_heal_target_time = 0.0
         self.last_heal_weapon_select = 0.0
-
-        # FIX #1: replace the broken time.time() % freq trick with a proper
-        # last-check timestamp so spy checks actually fire on schedule.
         self.last_spy_check_time     = 0.0
 
         # Input controllers
@@ -82,17 +426,14 @@ class MedicAIBot:
 
         # Vision & watchdog (optional)
         self.vision   = None
-        self.watchdog = WatchdogProcess() if WatchdogProcess else None
+        self.watchdog = WatchdogProcess()
 
-        if VisionEngine is not None:
-            try:
-                self.vision = VisionEngine()
-            except Exception as exc:
-                print(f"[vision] Could not init VisionEngine: {exc}")
+        try:
+            self.vision = VisionEngine()
+        except Exception as exc:
+            print(f"[vision] Could not init VisionEngine: {exc}")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Messaging helpers
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Messaging helpers ────────────────────────────────────────────────────
 
     async def send_activity(self, msg: str, audio_trigger: bool = False,
                             audio_file: str = "none") -> None:
@@ -143,9 +484,7 @@ class MedicAIBot:
         self.last_status_push = now
         self._queue_payload(self.build_status_payload())
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Config helpers
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Config helpers ───────────────────────────────────────────────────────
 
     def get_config_value(self, *path, default=None):
         cur = self.config
@@ -162,9 +501,7 @@ class MedicAIBot:
         except (TypeError, ValueError):
             return 6.0
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # State helpers
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── State helpers ────────────────────────────────────────────────────────
 
     def set_bot_state(self, new_state: str, activity_msg: str = "",
                       audio_file: str = "none") -> None:
@@ -189,17 +526,13 @@ class MedicAIBot:
         self.last_status_push          = 0.0
         self.last_any_heal_target_time = 0.0
         self.last_heal_weapon_select   = 0.0
-        self.last_spy_check_time       = 0.0  # FIX #1: reset spy check timer
+        self.last_spy_check_time       = 0.0
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Input helpers
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Input helpers ────────────────────────────────────────────────────────
 
     def select_heal_weapon(self, force: bool = False) -> None:
         now = time.time()
         if force or now - self.last_heal_weapon_select >= 1.0:
-            # FIX #2: wrap pynput calls in try/except – they can throw if the
-            # OS input subsystem is temporarily unavailable.
             try:
                 self.keyboard.tap("2")
             except Exception as exc:
@@ -236,22 +569,18 @@ class MedicAIBot:
             pass
 
     def _tap(self, key) -> None:
-        """Safe wrapper around keyboard.tap()."""
         try:
             self.keyboard.tap(key)
         except Exception as exc:
             print(f"[_tap] {exc}")
 
     def _release(self, key) -> None:
-        """Safe wrapper around keyboard.release()."""
         try:
             self.keyboard.release(key)
         except Exception as exc:
             print(f"[_release] {exc}")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # WebSocket handler
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── WebSocket handler ────────────────────────────────────────────────────
 
     async def handle_ws(self, websocket) -> None:
         self.ws = websocket
@@ -312,9 +641,7 @@ class MedicAIBot:
         finally:
             self.ws = None
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Bot main loop  (runs in a background daemon thread)
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Bot main loop ────────────────────────────────────────────────────────
 
     def bot_main_loop(self) -> None:
         self.reset_runtime_tracking()
@@ -341,26 +668,22 @@ class MedicAIBot:
                 time.sleep(1)
                 continue
 
-            # ── update HUD state if vision available ──────────────────────
             self.update_environment()
             self.handle_uber()
 
-            timeout               = self.get_return_to_spawn_delay()
-            time_without_target   = time.time() - self.last_any_heal_target_time
+            timeout             = self.get_return_to_spawn_delay()
+            time_without_target = time.time() - self.last_any_heal_target_time
 
-            # ── movement / healing decision ───────────────────────────────
             if self.current_target:
-                # OCR found a target – active healing mode
                 self.set_bot_state("healing")
                 self.select_heal_weapon()
                 self.press_heal_beam()
                 self._release("s")
                 self._tap("w")
                 if self.target_health and self.target_health > 142:
-                    self._tap("s")   # back off when overhealed
+                    self._tap("s")
 
             elif not vision_mode:
-                # ── NO VISION: just hold W and the heal beam ──────────────
                 self.set_bot_state("healing")
                 self.select_heal_weapon()
                 self.press_heal_beam()
@@ -369,7 +692,6 @@ class MedicAIBot:
                 self.check_spies()
 
             elif time_without_target < timeout:
-                # Vision active but no target yet – scan
                 self.set_bot_state("searching", "Scanning for a target…")
                 self.release_heal_beam()
                 self._tap("w")
@@ -380,7 +702,6 @@ class MedicAIBot:
                     pass
 
             else:
-                # Vision active, nobody seen for too long – drift back to spawn
                 self.set_bot_state("returning_to_spawn",
                                    "No target. Returning to spawn.")
                 self.release_heal_beam()
@@ -401,29 +722,23 @@ class MedicAIBot:
         self.set_bot_state("standby")
         self.send_status_sync(force=True)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Startup routines
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Startup routines ─────────────────────────────────────────────────────
 
     def skip_intro(self) -> None:
-        """Click the Medic slot if the class-selection screen is detected."""
         if not self.vision:
             time.sleep(3)
             return
-
         self.send_activity_sync("Checking for class-selection screen…")
         time.sleep(2)
-
         try:
             frame      = self.vision.capture_screen()
             brightness = frame.mean()
         except Exception:
             return
-
         if brightness < 60:
-            h, w     = frame.shape[:2]
-            medic_x  = int(w * 0.62)
-            medic_y  = int(h * 0.55)
+            h, w    = frame.shape[:2]
+            medic_x = int(w * 0.62)
+            medic_y = int(h * 0.55)
             try:
                 self.mouse.position = (medic_x, medic_y)
                 time.sleep(0.3)
@@ -438,19 +753,15 @@ class MedicAIBot:
             self.send_activity_sync("Already in-game – skipping class select.")
 
     def enter_spawn(self) -> None:
-        """Bind F9 to 'kill' via the TF2 console and press it to respawn."""
         if not self.vision:
             time.sleep(2)
             return
-
         self.send_activity_sync("Binding respawn key and respawning…")
         self._tap("`")
         time.sleep(0.5)
-
         for ch in "bind F9 kill":
             self._tap(ch)
             time.sleep(0.04)
-
         self._tap(Key.enter)
         time.sleep(0.2)
         self._tap("`")
@@ -460,30 +771,24 @@ class MedicAIBot:
         self.send_activity_sync("Respawned at team spawn.")
 
     def equip_loadout(self) -> None:
-        """Select the medigun (slot 2) on spawn."""
         self.select_heal_weapon(force=True)
         time.sleep(0.2)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Environment / HUD update
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Environment / HUD update ─────────────────────────────────────────────
 
     def update_environment(self) -> None:
         now = time.time()
         if now - self.last_environment_update < self.environment_update_interval:
             return
         self.last_environment_update = now
-
         if not self.vision:
             return
-
         try:
             snapshot = self.vision.read_hud_snapshot()
         except Exception as exc:
             print(f"[update_environment] Vision error: {exc}")
             return
 
-        # Warn once if OCR is unavailable
         if not snapshot.ocr_available and not self.warned_about_ocr:
             self.warned_about_ocr = True
             self.send_activity_sync(
@@ -493,13 +798,10 @@ class MedicAIBot:
 
         if snapshot.health is not None:
             self.health = snapshot.health
-
         if snapshot.heal_target_health is not None:
             self.target_health = snapshot.heal_target_health
-
         if snapshot.uber_charge is not None:
             self.uber_charge = snapshot.uber_charge
-
         if snapshot.heal_target_name:
             self.current_target            = snapshot.heal_target_name
             self.last_any_heal_target_time = now
@@ -509,9 +811,7 @@ class MedicAIBot:
         if self.health <= 0:
             self.send_activity_sync("Backstabbed!", True, "spy")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Uber management
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Uber management ─────────────────────────────────────────────────────
 
     def handle_uber(self) -> None:
         if self.uber_active:
@@ -528,7 +828,9 @@ class MedicAIBot:
         threshold   = 30
         try:
             threshold = int(
-                self.get_config_value("uber", "auto_pop_health_threshold", default=30)
+                self.get_config_value(
+                    "uber", "auto_pop_health_threshold", default=30
+                )
             )
         except (TypeError, ValueError):
             pass
@@ -550,15 +852,9 @@ class MedicAIBot:
         self.uber_start_time = time.time()
         self.send_activity_sync("Uber activated!", True, "uber_activated")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Spy check
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Spy check ───────────────────────────────────────────────────────────
 
     def check_spies(self) -> None:
-        # FIX #1: original code used `time.time() % freq < 0.1` which almost
-        # never fires because time.time() returns a large Unix timestamp and
-        # the fractional remainder only crosses 0 briefly.  Use a proper
-        # elapsed-time check instead.
         freq = self.config.get("spy_check_frequency", 10)
         try:
             freq = max(1, int(freq))
@@ -582,9 +878,7 @@ class MedicAIBot:
         except Exception as exc:
             print(f"[check_spies] mouse error: {exc}")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # System
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── System ──────────────────────────────────────────────────────────────
 
     def check_cpu_temp(self) -> None:
         try:
@@ -601,14 +895,12 @@ class MedicAIBot:
         except Exception:
             pass
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Server entry-point
-    # ─────────────────────────────────────────────────────────────────────────
+    # ─── Server entry-point ───────────────────────────────────────────────────
 
     async def run_server(self) -> None:
         print("Bot WebSocket server running on port 8765")
         async with websockets.serve(self.handle_ws, "0.0.0.0", 8765):
-            await asyncio.Future()   # run forever
+            await asyncio.Future()
 
     def run(self) -> None:
         self.loop = asyncio.new_event_loop()
@@ -616,7 +908,7 @@ class MedicAIBot:
         self.loop.run_until_complete(self.run_server())
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     bot = MedicAIBot()
