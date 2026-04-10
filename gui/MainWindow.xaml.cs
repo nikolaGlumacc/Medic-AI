@@ -829,7 +829,8 @@ namespace MedicAIGUI
         {
             _isConnected = connected;
             StatusLabel.Text = statusText; StatusLabel.Foreground = statusBrush;
-            StatusDot.Fill = statusBrush; StatusStripDot.Fill = statusBrush;
+            if (StatusDot != null) StatusDot.Fill = statusBrush;
+            if (StatusStripDot != null) StatusStripDot.Fill = statusBrush;
             ConnectBtn.Content = connected ? "Disconnect" : "Connect";
             if (!connected) { _isBotRunning = false; FollowModeLabel.Text = "Mode: STANDBY"; _sessionTimer?.Stop(); }
             UpdateActionButtons();
@@ -1177,13 +1178,13 @@ namespace MedicAIGUI
 
         private void HandleBotMessage(dynamic data)
         {
-            string type = (string)data["type"];
+            string type = data.type?.ToString() ?? string.Empty;
             if (type == "activity")
             {
-                string message   = (string)data["msg"];
+                string message = data.msg?.ToString() ?? string.Empty;
                 bool isMeleeKill = message.Contains("melee kill", StringComparison.OrdinalIgnoreCase);
-                bool isError     = message.Contains("error",  StringComparison.OrdinalIgnoreCase)
-                                || message.Contains("failed", StringComparison.OrdinalIgnoreCase);
+                bool isError = message.Contains("error", StringComparison.OrdinalIgnoreCase)
+                            || message.Contains("failed", StringComparison.OrdinalIgnoreCase);
                 if (isMeleeKill)
                 {
                     _meleeKills++; _allTimeMeleeKills++;
@@ -1195,8 +1196,21 @@ namespace MedicAIGUI
             }
             if (type == "status")
             {
-                if (data["uber"] != null) UberMeterLabel.Text  = $"Uber: {data["uber"]}%";
-                if (data["mode"] != null) FollowModeLabel.Text = $"Mode: {((string)data["mode"]).ToUpperInvariant()}";
+                try
+                {
+                    // Safe dynamic access using reflection-like approach
+                    var dict = (IDictionary<string, object>)data;
+                    if (dict.ContainsKey("uber"))
+                        UberMeterLabel.Text = $"Uber: {data.uber}%";
+                }
+                catch { }
+                try
+                {
+                    var dict = (IDictionary<string, object>)data;
+                    if (dict.ContainsKey("mode"))
+                        FollowModeLabel.Text = $"Mode: {data.mode?.ToString().ToUpperInvariant()}";
+                }
+                catch { }
             }
         }
 
@@ -1350,8 +1364,8 @@ namespace MedicAIGUI
 
         private void UpdateSessionStats()
         {
-            MeleeKillsStatLabel.Text   = $"Melee picks: {_meleeKills}";
-            TotalHealingStatLabel.Text = $"Healing output: {_totalHealing:N0} HP";
+            if (MeleeKillsStatLabel != null) MeleeKillsStatLabel.Text = $"Melee picks: {_meleeKills}";
+            if (TotalHealingStatLabel != null) TotalHealingStatLabel.Text = $"Healing output: {_totalHealing:N0} HP";
             UpdateAllTimeMeleeCounter();
         }
 
@@ -1413,6 +1427,8 @@ namespace MedicAIGUI
             if ((sender as FrameworkElement)?.DataContext is not VoiceLineSetting vl) return;
             try
             {
+                _previewPlayer.Stop();
+                _previewPlayer.Close();
                 if (!string.IsNullOrWhiteSpace(vl.CustomFilePath) && File.Exists(vl.CustomFilePath))
                 {
                     _previewPlayer.Open(new Uri(vl.CustomFilePath, UriKind.Absolute));

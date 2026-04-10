@@ -1698,6 +1698,61 @@
                                     </StackPanel>
                                 </Grid>
                             </TabItem>
+
+                            <!-- =============================================== -->
+                            <!-- BOT BRAIN CONFIGURATION (NEW)                    -->
+                            <!-- =============================================== -->
+                            <TabItem Header="Bot Brain">
+                                <Border Margin="0,8,0,0" Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="Decision Thresholds" Style="{StaticResource TitleText}" />
+                                        <TextBlock Text="These values control when the bot retreats, defends, or pops Uber. Sync to push changes to the running bot." Style="{StaticResource SectionLabel}" Margin="0,6,0,16" TextWrapping="Wrap" />
+
+                                        <!-- Retreat Health Threshold -->
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Retreat health threshold" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=RetreatHealthThresholdSlider, StringFormat={}{0:0}%}" Style="{StaticResource SectionLabel}" />
+                                        </Grid>
+                                        <Slider x:Name="RetreatHealthThresholdSlider" Minimum="0" Maximum="100" Value="50" TickFrequency="5" IsSnapToTickEnabled="True" />
+
+                                        <!-- Defend Enemy Distance -->
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Defend enemy distance (px)" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=DefendEnemyDistanceSlider, StringFormat={}{0:0} px}" Style="{StaticResource SectionLabel}" />
+                                        </Grid>
+                                        <Slider x:Name="DefendEnemyDistanceSlider" Minimum="50" Maximum="600" Value="300" TickFrequency="50" IsSnapToTickEnabled="True" />
+
+                                        <!-- Uber Pop Threshold -->
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Auto-pop Uber threshold" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=UberPopThresholdSlider, StringFormat={}{0:0}%}" Style="{StaticResource SectionLabel}" />
+                                        </Grid>
+                                        <Slider x:Name="UberPopThresholdSlider" Minimum="50" Maximum="100" Value="95" TickFrequency="5" IsSnapToTickEnabled="True" />
+
+                                        <!-- Checkboxes -->
+                                        <CheckBox x:Name="PreferMeleeForRetreatToggle" Content="Prefer melee when retreating" Margin="0,10,0,5" IsChecked="True"/>
+                                        <CheckBox x:Name="AutoHealToggle" Content="Auto-heal (hold M1 on target)" Margin="0,0,0,5" IsChecked="True"/>
+                                        <CheckBox x:Name="AutoUberBrainToggle" Content="Auto-pop Uber when ready" Margin="0,0,0,5" IsChecked="True"/>
+                                        <CheckBox x:Name="PriorityOnlyHealToggle" Content="Heal ONLY priority players (ignore others)" Margin="0,0,0,5" IsChecked="True"/>
+
+                                        <!-- Sync Button -->
+                                        <Button x:Name="SyncBrainConfigBtn" Content="Sync Brain Config to Bot" Click="SyncBrainConfigBtn_Click" Margin="0,15,0,5" Width="180" HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Border>
+                            </TabItem>
+
                         </TabControl>
                     </StackPanel>
                 </ScrollViewer>
