@@ -1034,18 +1034,31 @@ namespace MedicAIGUI
                 auto_heal                = AutoHealToggle.IsChecked == true,
                 auto_uber                = AutoUberBrainToggle.IsChecked == true,
                 priority_only_heal       = PriorityOnlyHealToggle.IsChecked == true,
-                priority_players         = Priorities.Select(p => p.Name).ToList()
+                priority_players         = Priorities.Select(p => p.Name).ToList(),
+                
+                // NEW follow settings
+                follow_enabled            = FollowEnabledToggle.IsChecked == true,
+                follow_forward_threshold  = (int)FollowForwardThresholdSlider.Value,
+                follow_strafe_threshold   = (int)FollowStrafeThresholdSlider.Value,
+                follow_backup_threshold   = (int)FollowBackupThresholdSlider.Value
             };
 
             string json    = JsonConvert.SerializeObject(payload);
             var    content = new StringContent(json, Encoding.UTF8, "application/json");
             string url     = $"{GetBotHttpBase()}/config";
 
-            var response = await _http.PostAsync(url, content);
-            if (response.IsSuccessStatusCode)
-                AppendActivity("[SYNC] Brain config pushed to bot (HTTP).");
-            else
-                AppendActivity($"[ERR] Brain config sync failed: HTTP {(int)response.StatusCode}", true);
+            try
+            {
+                var response = await _http.PostAsync(url, content);
+                if (response.IsSuccessStatusCode)
+                    AppendActivity("[SYNC] Brain config pushed to bot (HTTP).");
+                else
+                    AppendActivity($"[ERR] Brain config sync failed: HTTP {(int)response.StatusCode}", true);
+            }
+            catch (Exception ex)
+            {
+                AppendActivity($"[ERR] Brain sync error: {ex.Message}", true);
+            }
         }
 
         private async void SyncBrainConfigBtn_Click(object sender, RoutedEventArgs e)
