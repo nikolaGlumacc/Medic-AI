@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Media;
+using System.Net.Http;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -120,6 +121,15 @@ namespace MedicAIGUI
         // Updates
         public bool AutoCheckUpdatesOnLaunch { get; set; } = false;
 
+        // ── Bot Brain (NEW) ─────────────────────────────────────────────────
+        public int    RetreatHealthThreshold  { get; set; } = 50;
+        public int    DefendEnemyDistance     { get; set; } = 300;
+        public int    UberPopThreshold        { get; set; } = 95;
+        public bool   PreferMeleeForRetreat   { get; set; } = true;
+        public bool   AutoHealBrain           { get; set; } = true;
+        public bool   AutoUberBrain           { get; set; } = true;
+        public bool   PriorityOnlyHeal        { get; set; } = true;
+
         // Priority / whitelist / blacklist
         public List<SavedPriorityPlayer> Priorities { get; set; } = new();
         public List<string> Whitelist { get; set; } = new();
@@ -171,7 +181,7 @@ namespace MedicAIGUI
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // Bindable base + data models (unchanged)
+    // Bindable base + data models
     // ══════════════════════════════════════════════════════════════════════════
 
     public abstract class BindableBase : INotifyPropertyChanged
@@ -310,6 +320,9 @@ namespace MedicAIGUI
         private DispatcherTimer? _sessionTimer;
         private readonly MediaPlayer _previewPlayer = new();
 
+        // Shared HttpClient for brain config sync (reused across calls)
+        private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
+
         private int _totalHealing;
         private int _meleeKills;
         private int _allTimeMeleeKills;
@@ -350,17 +363,17 @@ namespace MedicAIGUI
 
             DataContext = this;
 
-            PriorityListView.ItemsSource      = Priorities;
-            RespawnTimerList.ItemsSource      = RespawnTimers;
-            WhitelistBox.ItemsSource          = WhitelistEntries;
-            BlacklistBox.ItemsSource          = BlacklistEntries;
+            PriorityListView.ItemsSource       = Priorities;
+            RespawnTimerList.ItemsSource       = RespawnTimers;
+            WhitelistBox.ItemsSource           = WhitelistEntries;
+            BlacklistBox.ItemsSource           = BlacklistEntries;
             LoadoutPresetListView.ItemsSource  = LoadoutPresets;
             AutoLoadoutRuleListView.ItemsSource = AutoLoadoutRules;
             AudioCueListView.ItemsSource       = AudioCueSettings;
             VoiceLineListView.ItemsSource      = VoiceLineSettings;
 
-            InitializeDefaultData();   // populate combo options / audio cue keys
-            LoadSettings();            // ← restore saved settings (overwrites defaults)
+            InitializeDefaultData();
+            LoadSettings();
             LoadOperatorState();
             UpdateAllTimeMeleeCounter();
 
@@ -380,7 +393,7 @@ namespace MedicAIGUI
 
         private string GetSettingsFilePath()
         {
-            string root = _repositoryRoot ?? Directory.GetCurrentDirectory();
+            string root    = _repositoryRoot ?? Directory.GetCurrentDirectory();
             string logsDir = Path.Combine(root, "logs");
             Directory.CreateDirectory(logsDir);
             return Path.Combine(logsDir, "gui_settings.json");
@@ -485,6 +498,15 @@ namespace MedicAIGUI
                     // Updates
                     AutoCheckUpdatesOnLaunch = AutoCheckUpdatesOnLaunchToggle.IsChecked == true,
 
+                    // ── Bot Brain (NEW) ──────────────────────────────────────
+                    RetreatHealthThreshold = (int)RetreatHealthThresholdSlider.Value,
+                    DefendEnemyDistance    = (int)DefendEnemyDistanceSlider.Value,
+                    UberPopThreshold       = (int)UberPopThresholdSlider.Value,
+                    PreferMeleeForRetreat  = PreferMeleeForRetreatToggle.IsChecked == true,
+                    AutoHealBrain          = AutoHealToggle.IsChecked == true,
+                    AutoUberBrain          = AutoUberBrainToggle.IsChecked == true,
+                    PriorityOnlyHeal       = PriorityOnlyHealToggle.IsChecked == true,
+
                     // Lists
                     Priorities = Priorities.Select(p => new SavedPriorityPlayer
                     {
@@ -495,7 +517,6 @@ namespace MedicAIGUI
                     Whitelist  = WhitelistEntries.ToList(),
                     Blacklist  = BlacklistEntries.ToList(),
 
-                    // Loadout presets
                     LoadoutPresets = LoadoutPresets.Select(p => new SavedLoadoutPreset
                     {
                         Name = p.Name, PrimaryWeapon = p.PrimaryWeapon,
@@ -503,14 +524,12 @@ namespace MedicAIGUI
                     }).ToList(),
                     ActivePresetIndex = Math.Max(0, ActivePresetSelector.SelectedIndex),
 
-                    // Audio cues
                     AudioCues = AudioCueSettings.Select(a => new SavedAudioCue
                     {
                         Key = a.Key, Enabled = a.Enabled,
                         Volume = a.Volume, CustomFilePath = a.CustomFilePath
                     }).ToList(),
 
-                    // Voice lines
                     VoiceLines = VoiceLineSettings.Select(v => new SavedVoiceLine
                     {
                         Key = v.Key, Enabled = v.Enabled, Volume = v.Volume,
@@ -524,7 +543,6 @@ namespace MedicAIGUI
             }
             catch (Exception ex)
             {
-                // Non-fatal – don't crash on save failure
                 Console.WriteLine($"[SaveSettings] {ex.Message}");
             }
         }
@@ -537,14 +555,8 @@ namespace MedicAIGUI
             if (!File.Exists(path)) return;
 
             SavedSettings? s;
-            try
-            {
-                s = JsonConvert.DeserializeObject<SavedSettings>(File.ReadAllText(path));
-            }
-            catch
-            {
-                return; // corrupted file – just use defaults
-            }
+            try { s = JsonConvert.DeserializeObject<SavedSettings>(File.ReadAllText(path)); }
+            catch { return; }
             if (s == null) return;
 
             // Connection
@@ -639,6 +651,15 @@ namespace MedicAIGUI
             // Updates
             AutoCheckUpdatesOnLaunchToggle.IsChecked = s.AutoCheckUpdatesOnLaunch;
 
+            // ── Bot Brain (NEW) ──────────────────────────────────────────────
+            RetreatHealthThresholdSlider.Value    = s.RetreatHealthThreshold;
+            DefendEnemyDistanceSlider.Value       = s.DefendEnemyDistance;
+            UberPopThresholdSlider.Value          = s.UberPopThreshold;
+            PreferMeleeForRetreatToggle.IsChecked = s.PreferMeleeForRetreat;
+            AutoHealToggle.IsChecked              = s.AutoHealBrain;
+            AutoUberBrainToggle.IsChecked         = s.AutoUberBrain;
+            PriorityOnlyHealToggle.IsChecked      = s.PriorityOnlyHeal;
+
             // Priority list
             Priorities.Clear();
             foreach (var p in s.Priorities)
@@ -649,13 +670,11 @@ namespace MedicAIGUI
                     PassiveModeOverride = p.PassiveModeOverride
                 });
 
-            // Whitelist / blacklist
             WhitelistEntries.Clear();
             foreach (var e in s.Whitelist) WhitelistEntries.Add(e);
             BlacklistEntries.Clear();
             foreach (var e in s.Blacklist) BlacklistEntries.Add(e);
 
-            // Loadout presets (only restore if saved data exists)
             if (s.LoadoutPresets.Count > 0)
             {
                 LoadoutPresets.Clear();
@@ -669,51 +688,33 @@ namespace MedicAIGUI
                 ActivePresetSelector.SelectedIndex = idx;
             }
 
-            // Audio cues – restore per-key settings
             if (s.AudioCues.Count > 0)
             {
                 var map = s.AudioCues.ToDictionary(a => a.Key);
                 foreach (var cue in AudioCueSettings)
-                {
                     if (map.TryGetValue(cue.Key, out var saved))
-                    {
-                        cue.Enabled = saved.Enabled;
-                        cue.Volume  = saved.Volume;
-                        cue.CustomFilePath = saved.CustomFilePath;
-                    }
-                }
+                    { cue.Enabled = saved.Enabled; cue.Volume = saved.Volume; cue.CustomFilePath = saved.CustomFilePath; }
             }
 
-            // Voice lines – restore per-key settings
             if (s.VoiceLines.Count > 0)
             {
                 var map = s.VoiceLines.ToDictionary(v => v.Key);
                 foreach (var vl in VoiceLineSettings)
-                {
                     if (map.TryGetValue(vl.Key, out var saved))
-                    {
-                        vl.Enabled           = saved.Enabled;
-                        vl.Volume            = saved.Volume;
-                        vl.CustomFilePath    = saved.CustomFilePath;
-                        vl.TtsFallbackEnabled = saved.TtsFallback;
-                        vl.TtsVolume         = saved.TtsVolume;
-                    }
-                }
+                    { vl.Enabled = saved.Enabled; vl.Volume = saved.Volume; vl.CustomFilePath = saved.CustomFilePath;
+                      vl.TtsFallbackEnabled = saved.TtsFallback; vl.TtsVolume = saved.TtsVolume; }
             }
         }
 
-        // ── default data init (keys / labels only – no values) ───────────────
+        // ── default data init ────────────────────────────────────────────────
 
         private void InitializeDefaultData()
         {
-            // Default loadout presets (used when no saved data exists)
-            LoadoutPresets.Add(new LoadoutPreset { Name = "Default Medigun",   PrimaryWeapon = "Crusader's Crossbow", SecondaryWeapon = "Medi Gun",    MeleeWeapon = "Ubersaw" });
-            LoadoutPresets.Add(new LoadoutPreset { Name = "Kritz Push",        PrimaryWeapon = "Crusader's Crossbow", SecondaryWeapon = "Kritzkrieg",  MeleeWeapon = "Ubersaw" });
-            LoadoutPresets.Add(new LoadoutPreset { Name = "Quick-Fix Rescue",  PrimaryWeapon = "Crusader's Crossbow", SecondaryWeapon = "Quick-Fix",   MeleeWeapon = "Solemn Vow" });
-
+            LoadoutPresets.Add(new LoadoutPreset { Name = "Default Medigun",   PrimaryWeapon = "Crusader's Crossbow", SecondaryWeapon = "Medi Gun",   MeleeWeapon = "Ubersaw" });
+            LoadoutPresets.Add(new LoadoutPreset { Name = "Kritz Push",        PrimaryWeapon = "Crusader's Crossbow", SecondaryWeapon = "Kritzkrieg", MeleeWeapon = "Ubersaw" });
+            LoadoutPresets.Add(new LoadoutPreset { Name = "Quick-Fix Rescue",  PrimaryWeapon = "Crusader's Crossbow", SecondaryWeapon = "Quick-Fix",  MeleeWeapon = "Solemn Vow" });
             AutoLoadoutRules.Add(new AutoLoadoutRule { TeammateClass = "Soldier", Preset = LoadoutPresets.FirstOrDefault() });
 
-            // Audio cues
             AddAudioCue("target_switched",          "Target switched");
             AddAudioCue("uber_ready",               "Uber ready");
             AddAudioCue("uber_activated",           "Uber activated");
@@ -731,18 +732,16 @@ namespace MedicAIGUI
             AddAudioCue("tier_1_event_tone",        "Tier 1 event tone");
             AddAudioCue("tier_2_event_tone",        "Tier 2 event tone");
 
-            // Voice lines
-            AddVoiceLine("spy_detected",    "SPY detected");
-            AddVoiceLine("backstabbed",     "Backstabbed");
-            AddVoiceLine("uber_ready",      "Uber ready");
-            AddVoiceLine("uber_activated",  "Uber activated");
-            AddVoiceLine("target_died",     "Target died");
-            AddVoiceLine("low_health",      "Low health");
+            AddVoiceLine("spy_detected",       "SPY detected");
+            AddVoiceLine("backstabbed",        "Backstabbed");
+            AddVoiceLine("uber_ready",         "Uber ready");
+            AddVoiceLine("uber_activated",     "Uber activated");
+            AddVoiceLine("target_died",        "Target died");
+            AddVoiceLine("low_health",         "Low health");
             AddVoiceLine("uber_saved_someone", "Uber saved someone");
-            AddVoiceLine("thanks_response", "Thanks response");
-            AddVoiceLine("melee_kill",      "Melee kill");
+            AddVoiceLine("thanks_response",    "Thanks response");
+            AddVoiceLine("melee_kill",         "Melee kill");
 
-            // Default log location
             string defaultLogDirectory = Path.Combine(_repositoryRoot ?? Directory.GetCurrentDirectory(), "logs");
             Directory.CreateDirectory(defaultLogDirectory);
             LogFileSaveLocationInput.Text = defaultLogDirectory;
@@ -757,7 +756,7 @@ namespace MedicAIGUI
         private void AddVoiceLine(string key, string label)
             => VoiceLineSettings.Add(new VoiceLineSetting { Key = key, Label = label });
 
-        // ── operator state (all-time melee kills) ────────────────────────────
+        // ── operator state ───────────────────────────────────────────────────
 
         private void LoadOperatorState()
         {
@@ -838,8 +837,8 @@ namespace MedicAIGUI
 
         private void UpdateActionButtons()
         {
-            StartBtn.IsEnabled    = _isConnected && !_isBotRunning;
-            StopBtn.IsEnabled     = _isConnected && _isBotRunning;
+            StartBtn.IsEnabled      = _isConnected && !_isBotRunning;
+            StopBtn.IsEnabled       = _isConnected && _isBotRunning;
             SendConfigBtn.IsEnabled = _isConnected;
         }
 
@@ -865,7 +864,7 @@ namespace MedicAIGUI
         private string GetUberBehaviorMode()
         {
             if (ManualOnlyToggle.IsChecked == true) return "Manual";
-            if (AutoPopToggle.IsChecked == true) return "Auto-pop";
+            if (AutoPopToggle.IsChecked    == true) return "Auto-pop";
             if (UberSuggestionAudioCueToggle.IsChecked == true) return "Suggest";
             return "Manual";
         }
@@ -919,10 +918,10 @@ namespace MedicAIGUI
                 spy_check_frequency = (int)SpyCheckFreqSlider.Value,
                 spy_detection = new
                 {
-                    spy_check_frequency                            = (int)SpyCheckFreqSlider.Value,
-                    spy_alertness_duration_after_backstab          = (int)SpyAlertnessDurationSlider.Value,
+                    spy_check_frequency                              = (int)SpyCheckFreqSlider.Value,
+                    spy_alertness_duration_after_backstab            = (int)SpyAlertnessDurationSlider.Value,
                     spy_alertness_increase_after_kill_feed_spy_death = SpyAlertnessIncreaseAfterKillFeedToggle.IsChecked == true,
-                    spy_check_camera_flick_speed                   = (int)SpyCheckCameraFlickSpeedSlider.Value
+                    spy_check_camera_flick_speed                     = (int)SpyCheckCameraFlickSpeedSlider.Value
                 },
                 scanning = new
                 {
@@ -944,43 +943,43 @@ namespace MedicAIGUI
                 },
                 passive_mode = new
                 {
-                    default_mode_on_startup      = GetDefaultModeOnStartup(),
-                    double_callout_timeout       = Math.Round(DoubleCalloutTimeoutSlider.Value, 1),
-                    idle_rotation_speed          = (int)PassiveModeIdleRotationSpeedSlider.Value,
-                    enemy_avoidance              = PassiveModeEnemyAvoidanceToggle.IsChecked == true,
-                    idle_audio_cue               = PassiveIdleAudioCueToggle.IsChecked == true,
-                    idle_audio_cue_interval      = (int)PassiveIdleAudioCueIntervalSlider.Value
+                    default_mode_on_startup = GetDefaultModeOnStartup(),
+                    double_callout_timeout  = Math.Round(DoubleCalloutTimeoutSlider.Value, 1),
+                    idle_rotation_speed     = (int)PassiveModeIdleRotationSpeedSlider.Value,
+                    enemy_avoidance         = PassiveModeEnemyAvoidanceToggle.IsChecked == true,
+                    idle_audio_cue          = PassiveIdleAudioCueToggle.IsChecked == true,
+                    idle_audio_cue_interval = (int)PassiveIdleAudioCueIntervalSlider.Value
                 },
-                master_volume          = (int)MasterVolumeSlider.Value,
-                audio_cues             = AudioCueSettings.Select(a => new { key = a.Key, label = a.Label, enabled = a.Enabled, volume = a.Volume, custom_file = a.CustomFilePath }).ToList(),
+                master_volume             = (int)MasterVolumeSlider.Value,
+                audio_cues                = AudioCueSettings.Select(a => new { key = a.Key, label = a.Label, enabled = a.Enabled, volume = a.Volume, custom_file = a.CustomFilePath }).ToList(),
                 master_voice_line_enabled = MasterVoiceLineToggle.IsChecked == true,
-                voice_lines            = VoiceLineSettings.Select(v => new { key = v.Key, label = v.Label, enabled = v.Enabled, volume = v.Volume, custom_file = v.CustomFilePath, tts_fallback = v.TtsFallbackEnabled, tts_volume = v.TtsVolume }).ToList(),
+                voice_lines               = VoiceLineSettings.Select(v => new { key = v.Key, label = v.Label, enabled = v.Enabled, volume = v.Volume, custom_file = v.CustomFilePath, tts_fallback = v.TtsFallbackEnabled, tts_volume = v.TtsVolume }).ToList(),
                 scoreboard_checks = new
                 {
-                    scoreboard_check_frequency           = (int)ScoreboardCheckFrequencySlider.Value,
-                    tab_hold_duration                    = Math.Round(TabHoldDurationSlider.Value, 2),
-                    auto_update_whitelist_from_scoreboard = AutoUpdateWhitelistFromScoreboardToggle.IsChecked == true,
-                    auto_whitelist_detection_from_scoreboard = AutoWhitelistDetectionCheckBox.IsChecked == true,
-                    class_detection                      = ClassDetectionToggle.IsChecked == true
+                    scoreboard_check_frequency                = (int)ScoreboardCheckFrequencySlider.Value,
+                    tab_hold_duration                         = Math.Round(TabHoldDurationSlider.Value, 2),
+                    auto_update_whitelist_from_scoreboard     = AutoUpdateWhitelistFromScoreboardToggle.IsChecked == true,
+                    auto_whitelist_detection_from_scoreboard  = AutoWhitelistDetectionCheckBox.IsChecked == true,
+                    class_detection                           = ClassDetectionToggle.IsChecked == true
                 },
                 session_logging = new
                 {
-                    auto_export_log_after_session  = AutoExportLogAfterSessionToggle.IsChecked == true,
-                    log_file_save_location         = LogFileSaveLocationInput.Text.Trim(),
-                    weekly_summary                 = WeeklySummaryToggle.IsChecked == true,
-                    weekly_summary_day             = GetSelectedComboContent(WeeklySummaryDayCombo, "Monday"),
-                    timestamps_in_log              = TimestampsInLogToggle.IsChecked == true,
-                    disconnect_and_kick_logging    = DisconnectKickLoggingToggle.IsChecked == true,
-                    melee_kill_all_time_counter    = _allTimeMeleeKills
+                    auto_export_log_after_session = AutoExportLogAfterSessionToggle.IsChecked == true,
+                    log_file_save_location        = LogFileSaveLocationInput.Text.Trim(),
+                    weekly_summary                = WeeklySummaryToggle.IsChecked == true,
+                    weekly_summary_day            = GetSelectedComboContent(WeeklySummaryDayCombo, "Monday"),
+                    timestamps_in_log             = TimestampsInLogToggle.IsChecked == true,
+                    disconnect_and_kick_logging   = DisconnectKickLoggingToggle.IsChecked == true,
+                    melee_kill_all_time_counter   = _allTimeMeleeKills
                 },
                 performance = new
                 {
-                    screen_capture_fps_limit              = (int)ScreenCaptureFpsLimitSlider.Value,
-                    yolo_thread_priority                  = GetSelectedComboContent(YoloThreadPriorityCombo, "Normal"),
-                    cpu_temperature_throttle_threshold    = (int)CpuThrottleThresholdSlider.Value,
-                    throttle_amount_when_overheating      = (int)ThrottleAmountSlider.Value,
-                    watchdog_auto_restart                 = WatchdogAutoRestartToggle.IsChecked == true,
-                    tf2_window_lock                       = Tf2WindowLockToggle.IsChecked == true
+                    screen_capture_fps_limit           = (int)ScreenCaptureFpsLimitSlider.Value,
+                    yolo_thread_priority               = GetSelectedComboContent(YoloThreadPriorityCombo, "Normal"),
+                    cpu_temperature_throttle_threshold = (int)CpuThrottleThresholdSlider.Value,
+                    throttle_amount_when_overheating   = (int)ThrottleAmountSlider.Value,
+                    watchdog_auto_restart              = WatchdogAutoRestartToggle.IsChecked == true,
+                    tf2_window_lock                    = Tf2WindowLockToggle.IsChecked == true
                 },
                 startup_shutdown = new
                 {
@@ -991,14 +990,71 @@ namespace MedicAIGUI
                     watchdog_restart_delay      = (int)WatchdogRestartDelaySlider.Value
                 },
                 updates = new { auto_check_on_launch = AutoCheckUpdatesOnLaunchToggle.IsChecked == true },
+
+                // ── Bot Brain section (NEW) ───────────────────────────────────
+                brain_config = new
+                {
+                    retreat_health_threshold = (int)RetreatHealthThresholdSlider.Value,
+                    defend_enemy_distance    = (int)DefendEnemyDistanceSlider.Value,
+                    uber_pop_threshold       = (int)UberPopThresholdSlider.Value,
+                    prefer_melee_for_retreat = PreferMeleeForRetreatToggle.IsChecked == true,
+                    auto_heal                = AutoHealToggle.IsChecked == true,
+                    auto_uber                = AutoUberBrainToggle.IsChecked == true,
+                    priority_only_heal       = PriorityOnlyHealToggle.IsChecked == true,
+                    priority_players         = Priorities.Select(p => p.Name).ToList()
+                },
+
                 priority_list = Priorities.Select(p => new { name = p.Name, tier = p.Tier, follow_distance_override = ParseIntOrDefault(p.FollowDistanceOverride), passive_mode_override = p.PassiveModeOverride }).ToList(),
-                whitelist = WhitelistEntries.ToList(),
-                blacklist = BlacklistEntries.ToList()
+                whitelist     = WhitelistEntries.ToList(),
+                blacklist     = BlacklistEntries.ToList()
             };
         }
 
         // ══════════════════════════════════════════════════════════════════════
-        // Event handlers (connection, bot control, lists, UI)
+        // Bot Brain HTTP sync  (NEW)
+        // Sends brain-specific thresholds to the Flask server on port 5000.
+        // This is separate from the WebSocket config path.
+        // ══════════════════════════════════════════════════════════════════════
+
+        private string GetBotHttpBase()
+        {
+            string ip = string.IsNullOrWhiteSpace(BotIpInput.Text) ? "127.0.0.1" : BotIpInput.Text.Trim();
+            return $"http://{ip}:5000";
+        }
+
+        private async Task SyncBrainConfigAsync()
+        {
+            var payload = new
+            {
+                retreat_health_threshold = (int)RetreatHealthThresholdSlider.Value,
+                defend_enemy_distance    = (int)DefendEnemyDistanceSlider.Value,
+                uber_pop_threshold       = (int)UberPopThresholdSlider.Value,
+                prefer_melee_for_retreat = PreferMeleeForRetreatToggle.IsChecked == true,
+                auto_heal                = AutoHealToggle.IsChecked == true,
+                auto_uber                = AutoUberBrainToggle.IsChecked == true,
+                priority_only_heal       = PriorityOnlyHealToggle.IsChecked == true,
+                priority_players         = Priorities.Select(p => p.Name).ToList()
+            };
+
+            string json    = JsonConvert.SerializeObject(payload);
+            var    content = new StringContent(json, Encoding.UTF8, "application/json");
+            string url     = $"{GetBotHttpBase()}/config";
+
+            var response = await _http.PostAsync(url, content);
+            if (response.IsSuccessStatusCode)
+                AppendActivity("[SYNC] Brain config pushed to bot (HTTP).");
+            else
+                AppendActivity($"[ERR] Brain config sync failed: HTTP {(int)response.StatusCode}", true);
+        }
+
+        private async void SyncBrainConfigBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try { await SyncBrainConfigAsync(); }
+            catch (Exception ex) { AppendActivity($"[ERR] Brain sync error: {ex.Message}", true); }
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // Event handlers  (connection, bot control, lists, UI)
         // ══════════════════════════════════════════════════════════════════════
 
         private async void ConnectBtn_Click(object sender, RoutedEventArgs e)
@@ -1124,9 +1180,10 @@ namespace MedicAIGUI
             string type = (string)data["type"];
             if (type == "activity")
             {
-                string message    = (string)data["msg"];
-                bool isMeleeKill  = message.Contains("melee kill", StringComparison.OrdinalIgnoreCase);
-                bool isError      = message.Contains("error", StringComparison.OrdinalIgnoreCase) || message.Contains("failed", StringComparison.OrdinalIgnoreCase);
+                string message   = (string)data["msg"];
+                bool isMeleeKill = message.Contains("melee kill", StringComparison.OrdinalIgnoreCase);
+                bool isError     = message.Contains("error",  StringComparison.OrdinalIgnoreCase)
+                                || message.Contains("failed", StringComparison.OrdinalIgnoreCase);
                 if (isMeleeKill)
                 {
                     _meleeKills++; _allTimeMeleeKills++;
@@ -1609,7 +1666,7 @@ namespace MedicAIGUI
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {
-            SaveSettings();          // ← persist everything before closing
+            SaveSettings();
             _reconnectTimer?.Stop();
             _sessionTimer?.Stop();
             TryAutoExportSessionLog();

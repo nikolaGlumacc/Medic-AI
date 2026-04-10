@@ -1,0 +1,92 @@
+<TabItem Header="Bot Brain">
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="1.1*" />
+                                        <ColumnDefinition Width="0.9*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Margin="0,0,14,0" Style="{StaticResource CardStyle}">
+                                        <StackPanel>
+                                            <TextBlock Text="Decision Thresholds" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="These values control when the bot switches between HEALING, DEFENDING, and RETREATING. Hit Push Brain Config to apply changes live without restarting." Style="{StaticResource SectionLabel}" Margin="0,6,0,16" TextWrapping="Wrap" />
+
+                                            <Grid Margin="0,0,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Retreat Health Threshold" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=RetreatHealthThresholdSlider, StringFormat={}{0:0} HP}" Style="{StaticResource SectionLabel}" />
+                                            </Grid>
+                                            <Slider x:Name="RetreatHealthThresholdSlider" Minimum="1" Maximum="149" Value="50" TickFrequency="1" IsSnapToTickEnabled="True" />
+
+                                            <Grid Margin="0,0,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Defend Enemy Distance" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=DefendEnemyDistanceSlider, StringFormat={}{0:0} px}" Style="{StaticResource SectionLabel}" />
+                                            </Grid>
+                                            <Slider x:Name="DefendEnemyDistanceSlider" Minimum="50" Maximum="800" Value="300" TickFrequency="10" IsSnapToTickEnabled="True" />
+
+                                            <Grid Margin="0,0,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Auto-Pop Uber Threshold" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=UberPopThresholdSlider, StringFormat={}{0:0}%}" Style="{StaticResource SectionLabel}" />
+                                            </Grid>
+                                            <Slider x:Name="UberPopThresholdSlider" Minimum="50" Maximum="100" Value="95" TickFrequency="1" IsSnapToTickEnabled="True" />
+
+                                            <CheckBox x:Name="PreferMeleeForRetreatToggle" Content="Switch to melee when retreating (speed boost + Amputator aura)" IsChecked="True" />
+                                            <CheckBox x:Name="AutoHealToggle" Content="Auto-hold heal beam (M1) when target is in range" IsChecked="True" />
+                                            <CheckBox x:Name="AutoUberBrainToggle" Content="Auto-pop Uber when threshold is reached" IsChecked="True" />
+                                            <CheckBox x:Name="PriorityOnlyHealToggle" Content="Priority-only heal mode — ignore non-priority players" IsChecked="True" />
+
+                                            <Button x:Name="SyncBrainConfigBtn" Content="Push Brain Config to Bot" Margin="0,16,0,0" Style="{StaticResource PrimaryButtonStyle}" Click="SyncBrainConfigBtn_Click" />
+                                            <TextBlock Text="Sends these values via HTTP POST to port 5000 on the bot server. The bot saves them to bot_config.json so they survive restarts." Style="{StaticResource SectionLabel}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                                        <StackPanel>
+                                            <TextBlock Text="How The Brain Works" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="A 10 Hz FSM loop runs independently of the vision pipeline and issues weapon-switch and mouse commands based on the current game state." Style="{StaticResource SectionLabel}" Margin="0,6,0,16" TextWrapping="Wrap" />
+
+                                            <Border Style="{StaticResource InsetCardStyle}" Margin="0,0,0,10">
+                                                <StackPanel>
+                                                    <TextBlock Text="HEALING" FontFamily="Bahnschrift SemiCondensed" FontSize="15" FontWeight="Bold" Foreground="{StaticResource AccentCoolBrush}" />
+                                                    <TextBlock Text="Priority target visible. Medigun out, heal beam held on M1. Auto-pops Uber when threshold is reached." Style="{StaticResource SectionLabel}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Style="{StaticResource InsetCardStyle}" Margin="0,0,0,10">
+                                                <StackPanel>
+                                                    <TextBlock Text="DEFENDING" FontFamily="Bahnschrift SemiCondensed" FontSize="15" FontWeight="Bold" Foreground="{StaticResource AccentHotBrush}" />
+                                                    <TextBlock Text="No priority target visible. Beam released, primary weapon drawn." Style="{StaticResource SectionLabel}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Style="{StaticResource InsetCardStyle}" Margin="0,0,0,14">
+                                                <StackPanel>
+                                                    <TextBlock Text="RETREATING" FontFamily="Bahnschrift SemiCondensed" FontSize="15" FontWeight="Bold" Foreground="Orange" />
+                                                    <TextBlock Text="Own health drops below the retreat threshold. Beam released, melee drawn for speed (or primary if melee retreat is off)." Style="{StaticResource SectionLabel}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Style="{StaticResource InsetCardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Live Summary" Style="{StaticResource SectionLabel}" />
+                                                    <TextBlock Text="{Binding Value, ElementName=RetreatHealthThresholdSlider, StringFormat=Retreat below: {0:0} HP}" Margin="0,8,0,0" />
+                                                    <TextBlock Text="{Binding Value, ElementName=UberPopThresholdSlider, StringFormat=Uber auto-pop at: {0:0}%}" Margin="0,4,0,0" />
+                                                    <TextBlock Text="{Binding IsChecked, ElementName=PriorityOnlyHealToggle, StringFormat=Priority-only heal: {0}}" Margin="0,4,0,0" />
+                                                    <TextBlock Text="{Binding IsChecked, ElementName=AutoHealToggle, StringFormat=Auto-hold beam: {0}}" Margin="0,4,0,0" />
+                                                    <TextBlock Text="{Binding IsChecked, ElementName=PreferMeleeForRetreatToggle, StringFormat=Melee on retreat: {0}}" Margin="0,4,0,0" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </TabItem>
