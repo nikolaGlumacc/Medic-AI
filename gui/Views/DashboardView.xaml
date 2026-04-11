@@ -1,0 +1,50 @@
+<UserControl x:Class="MedicAIGUI.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Foreground="White">
+    <Grid Margin="20">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="2*" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Quick Actions Card -->
+        <Border Background="#101826" CornerRadius="18" Padding="20" Grid.Column="0">
+            <StackPanel>
+                <TextBlock Text="Quick Actions" FontWeight="Bold" FontSize="18" Margin="0,0,0,20"/>
+                <Button Content="Connect/Disconnect" Margin="0,0,0,10"/>
+                <Button Content="Deploy Medic" Margin="0,0,0,10" Background="#F2586B"/>
+                <Button Content="Stop Bot" Margin="0,0,0,10"/>
+                <Button Content="Sync Config"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Activity Feed -->
+        <Border Background="#101826" CornerRadius="18" Padding="20" Grid.Column="1" Margin="20,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Activity Feed" FontWeight="Bold" FontSize="18" Margin="0,0,0,20"/>
+                <!-- Using ListBox over RichTextBox for async performance -->
+                <ListBox Grid.Row="1" Background="Transparent" BorderThickness="0" Foreground="LightGray">
+                    <ListBoxItem Content="[OK] Initializing system..."/>
+                    <ListBoxItem Content="[OK] Waiting for directives..."/>
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <!-- Live Session -->
+        <Border Background="#101826" CornerRadius="18" Padding="20" Grid.Column="2">
+            <StackPanel>
+                <TextBlock Text="Live Session" FontWeight="Bold" FontSize="18" Margin="0,0,0,20"/>
+                <TextBlock Text="Session Timer: 00:00" Margin="0,0,0,10"/>
+                <TextBlock Text="Melee Kills: 0" Margin="0,0,0,10"/>
+                <TextBlock Text="Total Healing: 0" Margin="0,0,0,10"/>
+                <TextBlock Text="Focus Player: None"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

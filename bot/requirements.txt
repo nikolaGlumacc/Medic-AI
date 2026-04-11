@@ -1,0 +1,14 @@
+opencv-python
+mss
+flask
+websockets
+torch
+transformers
+pynput
+psutil
+pywin32
+pillow
+pytesseract
+pydirectinput
+keyboard
+numpy
