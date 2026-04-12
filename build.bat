@@ -1,175 +1,208 @@
 @echo off
-setlocal EnableExtensions
-
-set "NO_PAUSE="
-set "SKIP_PIP="
-
-:parse_args
-if "%~1"=="" goto args_done
-if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
-if /I "%~1"=="--skip-pip" set "SKIP_PIP=1"
-shift
-goto parse_args
-
-:args_done
-pushd "%~dp0"
-
-:: ─────────────────────────────────────────────────────────
-:: 1. Resolve Python
-:: ─────────────────────────────────────────────────────────
-call :resolve_python
-if errorlevel 1 goto fail
-
-echo Using Python: %PYTHON_EXE%
-"%PYTHON_EXE%" --version
-if errorlevel 1 goto fail
-
-:: ─────────────────────────────────────────────────────────
-:: 2. Install Python dependencies
-:: ─────────────────────────────────────────────────────────
-if not defined SKIP_PIP (
-    echo.
-    echo Installing Python dependencies...
-    "%PYTHON_EXE%" -m pip install --disable-pip-version-check --upgrade pip
-    "%PYTHON_EXE%" -m pip install --disable-pip-version-check -r requirements.txt
-    if errorlevel 1 (
-        echo ERROR: Failed to install Python dependencies.
-        goto fail
-    )
-)
-
-:: ─────────────────────────────────────────────────────────
-:: 3. Verify bot imports
-:: ─────────────────────────────────────────────────────────
-echo.
-echo Verifying bot imports...
-"%PYTHON_EXE%" test_bot_imports.py
-if errorlevel 1 (
-    echo ERROR: Bot dependency verification failed.
-    goto fail
-)
-
-:: ─────────────────────────────────────────────────────────
-:: 4. Check .NET SDK (need 10.x)
-:: ─────────────────────────────────────────────────────────
-echo.
-where dotnet >nul 2>nul
-if errorlevel 1 (
-    echo ERROR: dotnet SDK was not found in PATH.
-    echo.
-    echo  Download the .NET 10 SDK from:
-    echo  https://dotnet.microsoft.com/download/dotnet/10.0
-    echo.
-    goto fail
-)
-
-:: Check that SDK version 10.x is present
-dotnet --list-sdks 2>nul | findstr /R /C:"^10\." >nul
-if errorlevel 1 (
-    echo ERROR: .NET 10 SDK is not installed.
-    echo        The GUI targets net10.0-windows and requires the .NET 10 SDK.
-    echo.
-    echo  Installed SDKs on this machine:
-    dotnet --list-sdks
-    echo.
-    echo  Download .NET 10 SDK from:
-    echo  https://dotnet.microsoft.com/download/dotnet/10.0
-    echo.
-    goto fail
-)
-
-echo .NET 10 SDK found.
-
-:: ─────────────────────────────────────────────────────────
-:: 5. Restore NuGet packages (this installs Newtonsoft.Json)
-:: ─────────────────────────────────────────────────────────
-echo.
-echo Restoring NuGet packages (Newtonsoft.Json etc.)...
-set "DOTNET_CLI_HOME=%CD%"
-set "DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1"
-dotnet restore gui\MedicAIGUI.csproj
-if errorlevel 1 (
-    echo ERROR: NuGet restore failed.
-    echo        Check your internet connection and try again.
-    goto fail
-)
-
-:: ─────────────────────────────────────────────────────────
-:: 6. Build the GUI
-:: ─────────────────────────────────────────────────────────
-echo.
-echo Building MedicAI GUI...
-dotnet build gui\MedicAIGUI.csproj -c Debug --no-restore
-if errorlevel 1 (
-    echo Build failed – retrying with full restore...
-    dotnet build gui\MedicAIGUI.csproj -c Debug
-    if errorlevel 1 (
-        echo ERROR: GUI build failed.
-        goto fail
-    )
-)
+setlocal EnableDelayedExpansion
+title MedicAI Setup
+color 0A
 
 echo.
 echo ============================================================
-echo  Build complete!
+echo   MedicAI - Full Setup Script
+echo   This will install everything needed to run the bot.
 echo ============================================================
-echo  Run start.bat       to launch the bot server AND the GUI.
-echo  Run start_server.bat to launch only the bot server.
-echo ============================================================
-set "EXITCODE=0"
-goto done
+echo.
 
-:: ─────────────────────────────────────────────────────────
-:: Subroutines
-:: ─────────────────────────────────────────────────────────
-
-:resolve_python
-:: Priority 1: dedicated venv at c:\medicai_venv
-if exist "c:\medicai_venv\Scripts\python.exe" (
-    set "PYTHON_EXE=c:\medicai_venv\Scripts\python.exe"
-    exit /b 0
+:: ── Check admin ──────────────────────────────────────────────
+net session >nul 2>&1
+if %errorLevel% NEQ 0 (
+    echo [ERROR] Please run this script as Administrator.
+    echo Right-click setup.bat and choose "Run as administrator".
+    pause
+    exit /b 1
 )
 
-:: Priority 2: local .venv in repo folder
-if exist "%~dp0.venv\Scripts\python.exe" (
-    set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
-    exit /b 0
+:: ── Check internet ────────────────────────────────────────────
+ping -n 1 google.com >nul 2>&1
+if %errorLevel% NEQ 0 (
+    echo [ERROR] No internet connection detected.
+    echo Please connect to the internet and try again.
+    pause
+    exit /b 1
 )
 
-:: Priority 3: create .venv using py launcher
-where py >nul 2>nul
-if not errorlevel 1 (
-    echo No MedicAI virtual environment found. Creating .venv with py launcher...
-    py -3 -m venv .venv
-    if errorlevel 1 (
-        echo ERROR: Failed to create .venv with the py launcher.
+echo [1/7] Checking Python...
+python --version >nul 2>&1
+if %errorLevel% NEQ 0 (
+    echo Python not found. Downloading Python 3.11...
+    curl -L -o "%TEMP%\python_installer.exe" "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+    echo Installing Python 3.11 (this may take a minute)...
+    "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+    if %errorLevel% NEQ 0 (
+        echo [ERROR] Python installation failed.
+        pause
         exit /b 1
     )
-    set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
-    exit /b 0
+    echo Python installed.
+    :: Refresh PATH so python is available immediately
+    call RefreshEnv.cmd >nul 2>&1
+) else (
+    python --version
+    echo Python already installed.
 )
 
-:: Priority 4: create .venv using plain python
-where python >nul 2>nul
-if not errorlevel 1 (
-    echo No MedicAI virtual environment found. Creating .venv with python...
-    python -m venv .venv
-    if errorlevel 1 (
-        echo ERROR: Failed to create .venv with python.
-        exit /b 1
+echo.
+echo [2/7] Upgrading pip...
+python -m pip install --upgrade pip --quiet
+
+echo.
+echo [3/7] Installing Python dependencies...
+echo (This may take several minutes on first run)
+echo.
+
+set DEPS=^
+    opencv-python ^
+    numpy ^
+    mss ^
+    pytesseract ^
+    flask ^
+    websockets ^
+    psutil ^
+    pywin32 ^
+    pydirectinput ^
+    pynput ^
+    requests ^
+    Pillow ^
+    newtonsoft-json
+
+:: Install from requirements.txt if it exists, else install manually
+if exist "%~dp0requirements.txt" (
+    echo Installing from requirements.txt...
+    python -m pip install -r "%~dp0requirements.txt" --quiet
+) else (
+    echo Installing packages manually...
+    python -m pip install ^
+        opencv-python ^
+        numpy ^
+        mss ^
+        pytesseract ^
+        flask ^
+        websockets ^
+        psutil ^
+        pywin32 ^
+        pydirectinput ^
+        pynput ^
+        requests ^
+        Pillow ^
+        --quiet
+)
+
+if %errorLevel% NEQ 0 (
+    echo [ERROR] Some Python packages failed to install.
+    echo Try running: python -m pip install -r requirements.txt
+    pause
+    exit /b 1
+)
+echo Python dependencies installed.
+
+echo.
+echo [4/7] Checking Tesseract OCR...
+if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
+    echo Tesseract already installed.
+) else (
+    echo Tesseract not found. Downloading installer...
+    curl -L -o "%TEMP%\tesseract_installer.exe" "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.4.0.20240606.exe"
+    echo Installing Tesseract OCR...
+    "%TEMP%\tesseract_installer.exe" /S
+    if %errorLevel% NEQ 0 (
+        echo [WARN] Tesseract auto-install failed.
+        echo Please install manually from:
+        echo https://github.com/UB-Mannheim/tesseract/wiki
+        echo Then re-run this script.
+    ) else (
+        echo Tesseract installed.
     )
-    set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
-    exit /b 0
 )
 
-echo ERROR: Python 3.11 or newer was not found on this machine.
-echo        Install Python from https://python.org and rerun build.bat.
-exit /b 1
+echo.
+echo [5/7] Checking .NET 10 Runtime (for GUI)...
+dotnet --list-runtimes 2>nul | findstr "Microsoft.NETCore.App 10" >nul
+if %errorLevel% NEQ 0 (
+    echo .NET 10 not found. Downloading...
+    curl -L -o "%TEMP%\dotnet_installer.exe" "https://download.microsoft.com/download/dotnet/10.0/dotnet-runtime-10.0.0-win-x64.exe"
+    echo Installing .NET 10 Runtime...
+    "%TEMP%\dotnet_installer.exe" /quiet /norestart
+    if %errorLevel% NEQ 0 (
+        echo [WARN] .NET 10 auto-install failed.
+        echo Please install manually from: https://dotnet.microsoft.com/download/dotnet/10.0
+    ) else (
+        echo .NET 10 installed.
+    )
+) else (
+    echo .NET 10 already installed.
+)
 
-:fail
-set "EXITCODE=1"
+echo.
+echo [6/7] Creating required folders...
+if not exist "%~dp0bot\weapons"  mkdir "%~dp0bot\weapons"
+if not exist "%~dp0bot\debug"    mkdir "%~dp0bot\debug"
+if not exist "%~dp0bot\audio"    mkdir "%~dp0bot\audio"
+echo Folders ready.
 
-:done
-popd
-if not defined NO_PAUSE pause
-exit /b %EXITCODE%
+echo.
+echo [7/7] Building GUI...
+if exist "%~dp0gui\MedicAIGUI.csproj" (
+    cd /d "%~dp0gui"
+    dotnet build --configuration Release --nologo -v quiet
+    if %errorLevel% NEQ 0 (
+        echo [WARN] GUI build failed. Check .NET installation.
+    ) else (
+        echo GUI built successfully.
+    )
+    cd /d "%~dp0"
+) else (
+    echo [WARN] GUI project not found at gui\MedicAIGUI.csproj — skipping build.
+)
+
+:: ── Write requirements.txt if missing ────────────────────────
+if not exist "%~dp0requirements.txt" (
+    echo Writing requirements.txt...
+    (
+        echo opencv-python
+        echo numpy
+        echo mss
+        echo pytesseract
+        echo flask
+        echo websockets
+        echo psutil
+        echo pywin32
+        echo pydirectinput
+        echo pynput
+        echo requests
+        echo Pillow
+    ) > "%~dp0requirements.txt"
+)
+
+:: ── Run debug tool to verify everything ──────────────────────
+echo.
+echo ============================================================
+echo   Running diagnostics to verify installation...
+echo ============================================================
+echo.
+
+if exist "%~dp0bot\debug_tool.py" (
+    python "%~dp0bot\debug_tool.py" --ocr --vision --loadout
+) else (
+    echo [INFO] debug_tool.py not found — skipping diagnostics.
+    echo        Drop debug_tool.py into the bot\ folder to enable this.
+)
+
+echo.
+echo ============================================================
+echo   Setup complete!
+echo.
+echo   To start the bot:
+echo     - Double-click start.bat
+echo   Or manually:
+echo     1. Run:  python bot\bot_server.py
+echo     2. Run:  gui\bin\Release\net10.0-windows\MedicAIGUI.exe
+echo ============================================================
+echo.
+pause

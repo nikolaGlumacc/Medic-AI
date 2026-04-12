@@ -19,6 +19,7 @@ namespace MedicAIGUI
             InitializeComponent();
             _service.LoadLocalSettings();
             _settings = _service.Settings;
+            _service.ApplyConnectionSettings(_settings);
             
             // Apply theme on startup
             ApplyTheme();
@@ -28,6 +29,7 @@ namespace MedicAIGUI
 
             // Default view
             NavigateTo(new DashboardView());
+            ApplyUpdateSnapshot(false);
         }
 
         private void ApplyTheme()
@@ -66,12 +68,20 @@ namespace MedicAIGUI
         private void NavBtn_Checked(object sender, RoutedEventArgs e)
         {
             if (ViewHost == null) return;
-            string viewName = (sender as RadioButton)?.Name;
+            string? viewName = (sender as RadioButton)?.Name;
             switch (viewName)
             {
                 case "DashboardBtn": NavigateTo(new DashboardView()); break;
                 case "PriorityBtn":  NavigateTo(new PriorityPlayersView()); break;
                 case "SettingsBtn":  NavigateTo(new SettingsView()); break;
+            }
+        }
+
+        private void ApplyUpdateSnapshot(bool updatesAvailable)
+        {
+            if (UpdateNavBadge != null)
+            {
+                UpdateNavBadge.Visibility = updatesAvailable ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 

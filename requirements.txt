@@ -10,3 +10,6 @@ pyautogui>=0.9.54
 keyboard>=0.13.5
 flask>=3.0.0
 pywin32>=306
+pyttsx3>=2.90
+pydirectinput>=1.0.4
+transformers>=4.40.0

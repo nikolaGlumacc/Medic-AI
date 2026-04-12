@@ -1,7 +1,10 @@
 using System;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using Microsoft.Win32;
 using MedicAIGUI.Services;
 
 namespace MedicAIGUI.Views
@@ -10,67 +13,140 @@ namespace MedicAIGUI.Views
     {
         private readonly MedicBotService _service = MedicBotService.Instance;
         private SavedSettings _settings;
+        private bool _eventsAttached;
+        private bool _suspendDirtyTracking;
 
         public SettingsView()
         {
             InitializeComponent();
+
             _settings = _service.Settings;
             DataContext = _settings;
+            _service.ApplyConnectionSettings(_settings);
+            Loaded += SettingsView_Loaded;
+            Unloaded += SettingsView_Unloaded;
+        }
+
+        private void SettingsView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (_eventsAttached)
+            {
+                return;
+            }
+
+            _settings.PropertyChanged += Settings_PropertyChanged;
+            _eventsAttached = true;
+        }
+
+        private void SettingsView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (!_eventsAttached)
+            {
+                return;
+            }
+
+            _settings.PropertyChanged -= Settings_PropertyChanged;
+            _eventsAttached = false;
+        }
+
+        private void Settings_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (_suspendDirtyTracking)
+            {
+                return;
+            }
+
+            UnsavedIndicator.Visibility = Visibility.Visible;
         }
 
         private async void SyncAll_Click(object sender, RoutedEventArgs e)
         {
+            _service.ApplyConnectionSettings(_settings);
             _settings.SaveSettings();
-            await _service.SyncConfigAsync();
-            MessageBox.Show("All configurations synchronized to the AI Node.", "Sync Success", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            var success = await _service.SyncConfigAsync();
+            if (success)
+            {
+                UnsavedIndicator.Visibility = Visibility.Collapsed;
+                MessageBox.Show("Settings synchronized.", "Sync", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("Failed to synchronize settings.", "Sync", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async void PushConfigBtn_Click(object sender, RoutedEventArgs e)
         {
+            _service.ApplyConnectionSettings(_settings);
             _settings.SaveSettings();
-            bool success = await _service.SyncBrainConfigAsync();
-            if (success) 
+
+            var success = await _service.SyncBrainConfigAsync();
+            if (success)
             {
-                MessageBox.Show("Brain configuration synchronized.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            else
-            {
-                MessageBox.Show("Failed to sync configuration.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                UnsavedIndicator.Visibility = Visibility.Collapsed;
             }
         }
 
-        private void Refresh_Click(object sender, RoutedEventArgs e)
+        private void SaveProfileBtn_Click(object sender, RoutedEventArgs e)
         {
-            _service.LoadLocalSettings();
-            _settings = _service.Settings;
+            var dialog = new SaveFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                FileName = "medicai-profile.json",
+                AddExtension = true
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                _settings.SaveToPath(dialog.FileName);
+            }
+        }
+
+        private void LoadProfileBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                CheckFileExists = true
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            var loaded = SavedSettings.LoadFromPath(dialog.FileName);
+
+            _suspendDirtyTracking = true;
+            _settings.ApplyFrom(loaded);
+            _service.ApplyConnectionSettings(_settings);
+            _suspendDirtyTracking = false;
+
+            DataContext = null;
             DataContext = _settings;
+            UnsavedIndicator.Visibility = Visibility.Visible;
         }
 
-        private void UpdateAccent_Click(object sender, RoutedEventArgs e)
-        {
-            var btn = (Button)sender;
-            string colorHex = btn.Tag?.ToString();
-            if (string.IsNullOrEmpty(colorHex)) return;
-
-            _settings.AccentColor = colorHex;
-            ApplyAccentColor(colorHex);
-        }
-
-        private void ApplyAccentColor(string hex)
+        private void DetectIpBtn_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var color = (Color)ColorConverter.ConvertFromString(hex);
-                Application.Current.Resources["AccentCool"] = color;
-                
-                // Update based on dynamic resource
-                var brush = new SolidColorBrush(color);
-                Application.Current.Resources["AccentCoolBrush"] = brush;
-            }
-            catch { }
-        }
+                var hostEntry = Dns.GetHostEntry(Dns.GetHostName());
+                var address = hostEntry.AddressList.FirstOrDefault(ip =>
+                    ip.AddressFamily == AddressFamily.InterNetwork &&
+                    !IPAddress.IsLoopback(ip));
 
-        // Additional handlers for font, opacity, etc. can be added here
-        // or handled via binding if MainWindow reacts to PropertyChanged
+                if (address != null)
+                {
+                    BotIpInput.Text = address.ToString();
+                    _settings.BotIp = address.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Unable to detect IP: {ex.Message}", "IP Detection", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
     }
 }

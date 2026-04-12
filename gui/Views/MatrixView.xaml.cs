@@ -1,30 +1,38 @@
 using System;
-using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
-using MedicAIGUI.Services;
 
 namespace MedicAIGUI.Views
 {
     public partial class MatrixView : UserControl
     {
-        private readonly MedicBotService _service = MedicBotService.Instance;
         private readonly DispatcherTimer _simulationTimer;
-        private readonly Random _rng = new Random();
 
         public MatrixView()
         {
             InitializeComponent();
-            
-            // Start a simulation timer to update the "Triage Matrix" with live-looking data
-            _simulationTimer = new DispatcherTimer();
-            _simulationTimer.Interval = TimeSpan.FromSeconds(1.5);
+
+            _simulationTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1.5)
+            };
             _simulationTimer.Tick += SimulationTimer_Tick;
+            Loaded += MatrixView_Loaded;
+            Unloaded += MatrixView_Unloaded;
+        }
+
+        private void MatrixView_Loaded(object sender, RoutedEventArgs e)
+        {
             _simulationTimer.Start();
         }
 
-        private void SimulationTimer_Tick(object sender, EventArgs e)
+        private void MatrixView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            _simulationTimer.Stop();
+        }
+
+        private void SimulationTimer_Tick(object? sender, EventArgs e)
         {
             // In a production app, we would populate the 'UnitList' StackPanel
             // dynamically here. For now, since the XAML has static examples,
@@ -38,7 +46,7 @@ namespace MedicAIGUI.Views
 
     public class PriorityPlayer
     {
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public int Tier { get; set; }
     }
 }

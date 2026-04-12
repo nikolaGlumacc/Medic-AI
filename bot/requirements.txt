@@ -12,3 +12,4 @@ pytesseract
 pydirectinput
 keyboard
 numpy
+pyttsx3

@@ -3,48 +3,96 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Foreground="White">
     <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="2*" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="1.2*"/>
+            <ColumnDefinition Width="1.8*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Quick Actions Card -->
-        <Border Background="#101826" CornerRadius="18" Padding="20" Grid.Column="0">
+        <Border Grid.Row="0" Grid.Column="0" Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,16,16">
             <StackPanel>
-                <TextBlock Text="Quick Actions" FontWeight="Bold" FontSize="18" Margin="0,0,0,20"/>
-                <Button Content="Connect/Disconnect" Margin="0,0,0,10"/>
-                <Button Content="Deploy Medic" Margin="0,0,0,10" Background="#F2586B"/>
-                <Button Content="Stop Bot" Margin="0,0,0,10"/>
-                <Button Content="Sync Config"/>
+                <TextBlock Text="Connection" FontWeight="Bold" FontSize="18" Margin="0,0,0,16"/>
+                <WrapPanel Margin="0,0,0,16">
+                    <Button x:Name="RefreshBtn" Content="Refresh Status" Width="130" Height="38" Margin="0,0,10,10" Click="RefreshBtn_Click"/>
+                    <Button x:Name="SyncConfigBtn" Content="Sync Config" Width="120" Height="38" Margin="0,0,10,10" Click="SyncConfigBtn_Click"/>
+                    <Button x:Name="FetchWeaponsBtn" Content="Fetch Weapons" Width="130" Height="38" Margin="0,0,10,10" Click="FetchWeaponsBtn_Click"/>
+                    <Button x:Name="DebugSnapshotBtn" Content="Debug Snapshot" Width="130" Height="38" Margin="0,0,10,10" Click="DebugSnapshotBtn_Click"/>
+                    <Button x:Name="ReconnectBtn" Content="Toggle Simulation" Width="140" Height="38" Click="SimulationBtn_Click"/>
+                </WrapPanel>
+                <TextBlock Text="Detected weapons" FontSize="12" Opacity="0.7"/>
+                <ListBox x:Name="WeaponsList" Height="110" Background="Transparent" BorderThickness="0" Foreground="LightGray"/>
             </StackPanel>
         </Border>
 
-        <!-- Activity Feed -->
-        <Border Background="#101826" CornerRadius="18" Padding="20" Grid.Column="1" Margin="20,0">
+        <Border Grid.Row="0" Grid.Column="1" Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,0,16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="160"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Live Telemetry" FontWeight="Bold" FontSize="18" Margin="0,0,0,16"/>
+                <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Healing" FontSize="12" Opacity="0.7"/>
+                        <TextBlock x:Name="HealingStat" Text="0 HP/s" FontSize="22" FontWeight="Bold"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="Melee Kills" FontSize="12" Opacity="0.7"/>
+                        <TextBlock x:Name="MeleeStat" Text="0" FontSize="22" FontWeight="Bold"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="Uptime" FontSize="12" Opacity="0.7"/>
+                        <TextBlock x:Name="UptimeStat" Text="00:00:00" FontSize="22" FontWeight="Bold"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="Latency" FontSize="12" Opacity="0.7"/>
+                        <TextBlock x:Name="PingStat" Text="0 ms" FontSize="22" FontWeight="Bold"/>
+                    </StackPanel>
+                </UniformGrid>
+                <Border Grid.Row="2" Background="#0B111A" CornerRadius="12" Padding="12">
+                    <Canvas x:Name="SparklineCanvas">
+                        <Polyline x:Name="Sparkline" Stroke="#4ED9FF" StrokeThickness="3"/>
+                    </Canvas>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#101826" CornerRadius="18" Padding="20">
+            <DockPanel>
+                <TextBlock Text="Activity Log" FontWeight="Bold" FontSize="18" DockPanel.Dock="Left"/>
+                <TextBlock x:Name="ScrollStateText" Text="Auto-scroll" FontSize="12" Opacity="0.7" HorizontalAlignment="Right"/>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#101826" CornerRadius="18" Padding="20" Margin="0,16,0,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <TextBlock Text="Activity Feed" FontWeight="Bold" FontSize="18" Margin="0,0,0,20"/>
-                <!-- Using ListBox over RichTextBox for async performance -->
-                <ListBox Grid.Row="1" Background="Transparent" BorderThickness="0" Foreground="LightGray">
-                    <ListBoxItem Content="[OK] Initializing system..."/>
-                    <ListBoxItem Content="[OK] Waiting for directives..."/>
-                </ListBox>
+                <WrapPanel Margin="0,0,0,16">
+                    <Button x:Name="CopyLogBtn" Content="Copy" Width="90" Height="36" Margin="0,0,10,10" Click="CopyLogBtn_Click"/>
+                    <Button x:Name="ScrollLockBtn" Content="Lock Scroll" Width="110" Height="36" Margin="0,0,10,10" Click="ScrollLockBtn_Click"/>
+                    <Button x:Name="FilterAllBtn" Content="All" Width="80" Height="36" Margin="0,0,10,10" Click="FilterAllBtn_Click"/>
+                    <Button x:Name="FilterOkBtn" Content="OK" Width="80" Height="36" Margin="0,0,10,10" Click="FilterOkBtn_Click"/>
+                    <Button x:Name="FilterErrBtn" Content="ERR" Width="80" Height="36" Margin="0,0,10,10" Click="FilterErrBtn_Click"/>
+                    <Button x:Name="FilterSyncBtn" Content="SYNC" Width="80" Height="36" Margin="0,0,10,10" Click="FilterSyncBtn_Click"/>
+                    <Button x:Name="FilterWarnBtn" Content="WARN" Width="80" Height="36" Margin="0,0,10,10" Click="FilterWarnBtn_Click"/>
+                    <TextBox x:Name="ActivitySearchBox" Width="220" Height="36" TextChanged="ActivitySearchBox_TextChanged"/>
+                </WrapPanel>
+                <RichTextBox x:Name="LogOutput"
+                             Grid.Row="1"
+                             IsReadOnly="True"
+                             Background="#0B111A"
+                             BorderThickness="0"
+                             Foreground="LightGray"
+                             VerticalScrollBarVisibility="Auto"/>
             </Grid>
-        </Border>
-
-        <!-- Live Session -->
-        <Border Background="#101826" CornerRadius="18" Padding="20" Grid.Column="2">
-            <StackPanel>
-                <TextBlock Text="Live Session" FontWeight="Bold" FontSize="18" Margin="0,0,0,20"/>
-                <TextBlock Text="Session Timer: 00:00" Margin="0,0,0,10"/>
-                <TextBlock Text="Melee Kills: 0" Margin="0,0,0,10"/>
-                <TextBlock Text="Total Healing: 0" Margin="0,0,0,10"/>
-                <TextBlock Text="Focus Player: None"/>
-            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

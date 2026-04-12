@@ -1,6 +1,6 @@
 # Virtual Environment
 venv/
-c:\medicai_venv\
+medicai_venv/
 .venv/
 env/
 ENV/
@@ -44,6 +44,7 @@ logs/
 # C# / .NET
 bin/
 obj/
+.dotnet/
 .csproj.user
 .csproj.DotSettings
 *.user

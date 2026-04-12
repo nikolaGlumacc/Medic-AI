@@ -2,35 +2,145 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Foreground="White">
-    <Grid>
-        <TabControl Background="Transparent" BorderThickness="0">
-            <TabItem Header="Bot Brain" Background="Transparent" Foreground="Black">
-                <ScrollViewer>
-                    <StackPanel Margin="20">
-                        <TextBlock Text="Retreat Health Threshold" Foreground="White" Margin="0,10,0,0"/>
-                        <Slider Minimum="0" Maximum="150" Value="{Binding RetreatHealthThreshold, Mode=TwoWay}" Foreground="Red"/>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-                        <TextBlock Text="Uber Pop Threshold" Foreground="White" Margin="0,10,0,0"/>
-                        <Slider Minimum="0" Maximum="100" Value="{Binding UberPopThreshold, Mode=TwoWay}"/>
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Settings" FontSize="22" FontWeight="Bold" Margin="0,0,16,0"/>
+                <Border x:Name="UnsavedIndicator" Background="#F2586B" CornerRadius="10" Padding="10,4" Visibility="Collapsed">
+                    <TextBlock Text="UNSAVED CHANGES" FontSize="10" FontWeight="Bold"/>
+                </Border>
+            </StackPanel>
+            <WrapPanel Grid.Column="1">
+                <Button Content="Sync All Settings" Width="150" Height="38" Margin="0,0,10,0" Click="SyncAll_Click"/>
+                <Button x:Name="SaveProfileBtn" Content="Save Profile" Width="120" Height="38" Margin="0,0,10,0" Click="SaveProfileBtn_Click"/>
+                <Button x:Name="LoadProfileBtn" Content="Load Profile" Width="120" Height="38" Click="LoadProfileBtn_Click"/>
+            </WrapPanel>
+        </Grid>
 
-                        <CheckBox Content="Auto Uber" IsChecked="{Binding AutoUber, Mode=TwoWay}" Foreground="White" Margin="0,10,0,0"/>
-                        <CheckBox Content="Prefer Melee on Retreat" IsChecked="{Binding PreferMeleeForRetreat, Mode=TwoWay}" Foreground="White" Margin="0,10,0,0"/>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Bot IP" FontWeight="Bold"/>
+                            <TextBox x:Name="BotIpInput" Text="{Binding BotIp, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                            <TextBlock Text="Port" FontWeight="Bold"/>
+                            <TextBox x:Name="PortInput" Text="{Binding BotPort, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <Button x:Name="DetectIpBtn" Grid.Column="2" Content="Detect IP" Width="110" Height="38" VerticalAlignment="Bottom" Click="DetectIpBtn_Click"/>
+                    </Grid>
+                </Border>
 
-                        <Button Content="Push Brain Config" Width="150" Height="40" Margin="0,20,0,0" x:Name="PushConfigBtn" Click="PushConfigBtn_Click" HorizontalAlignment="Left"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-            <TabItem Header="Spy Detection" Background="Transparent" Foreground="Black">
-                <StackPanel Margin="20">
-                    <TextBlock Text="Check Frequency (s)" Foreground="White"/>
-                    <Slider Minimum="1" Maximum="30" Value="{Binding SpyCheckFrequency, Mode=TwoWay}"/>
-                    <TextBlock Text="Alertness Duration (s)" Foreground="White" Margin="0,10,0,0"/>
-                    <Slider Minimum="1" Maximum="60" Value="{Binding SpyAlertnessDuration, Mode=TwoWay}"/>
-                </StackPanel>
-            </TabItem>
-            <TabItem Header="Audio Cues" Background="Transparent" Foreground="Black"/>
-            <TabItem Header="Voice Lines" Background="Transparent" Foreground="Black"/>
-            <TabItem Header="Updates" Background="Transparent" Foreground="Black"/>
-        </TabControl>
+                <TabControl Background="Transparent" BorderThickness="0">
+                    <TabItem Header="Aim &amp; Mouse">
+                        <ScrollViewer>
+                            <StackPanel Margin="20">
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Mouse speed"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MouseSpeedSlider, StringFormat={}{0:F2}}"/>
+                                </Grid>
+                                <Slider x:Name="MouseSpeedSlider" Minimum="0.1" Maximum="2.0" Value="{Binding MouseSpeed, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Smoothing"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=SmoothingSlider, StringFormat={}{0:F2}}"/>
+                                </Grid>
+                                <Slider x:Name="SmoothingSlider" Minimum="0.01" Maximum="0.5" Value="{Binding Smoothing, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Deadzone"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=DeadzoneSlider, StringFormat={}{0:0}}"/>
+                                </Grid>
+                                <Slider x:Name="DeadzoneSlider" Minimum="0" Maximum="100" Value="{Binding Deadzone, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Max move px"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxMoveSlider, StringFormat={}{0:0}}"/>
+                                </Grid>
+                                <Slider x:Name="MaxMoveSlider" Minimum="1" Maximum="50" Value="{Binding MaxMovePx, Mode=TwoWay}"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem Header="Tracking">
+                        <ScrollViewer>
+                            <StackPanel Margin="20">
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Match distance"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MatchDistSlider, StringFormat={}{0:0}}"/>
+                                </Grid>
+                                <Slider x:Name="MatchDistSlider" Minimum="0" Maximum="500" Value="{Binding MatchDist, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Grace period"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=GracePeriodSlider, StringFormat={}{0:F2}}"/>
+                                </Grid>
+                                <Slider x:Name="GracePeriodSlider" Minimum="0" Maximum="5" Value="{Binding GracePeriod, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Lock grace"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=LockGraceSlider, StringFormat={}{0:F2}}"/>
+                                </Grid>
+                                <Slider x:Name="LockGraceSlider" Minimum="0" Maximum="5" Value="{Binding LockGrace, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Max tracked players"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=TrackedPlayersSlider, StringFormat={}{0:0}}"/>
+                                </Grid>
+                                <Slider x:Name="TrackedPlayersSlider" Minimum="1" Maximum="16" Value="{Binding MaxTrackedPlayers, Mode=TwoWay}"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem Header="Behavior">
+                        <ScrollViewer>
+                            <StackPanel Margin="20">
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Retreat health threshold"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=RetreatSlider, StringFormat={}{0:0}}"/>
+                                </Grid>
+                                <Slider x:Name="RetreatSlider" Minimum="0" Maximum="150" Value="{Binding RetreatHealthThreshold, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Uber pop threshold"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=UberSlider, StringFormat={}{0:F0}}"/>
+                                </Grid>
+                                <Slider x:Name="UberSlider" Minimum="0" Maximum="100" Value="{Binding UberPopThreshold, Mode=TwoWay}"/>
+
+                                <CheckBox Content="Auto Uber" IsChecked="{Binding AutoUber, Mode=TwoWay}" Margin="0,10,0,0"/>
+                                <CheckBox Content="Prefer melee on retreat" IsChecked="{Binding PreferMeleeForRetreat, Mode=TwoWay}" Margin="0,10,0,0"/>
+                                <CheckBox Content="Follow enabled" IsChecked="{Binding FollowEnabled, Mode=TwoWay}" Margin="0,10,0,0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>

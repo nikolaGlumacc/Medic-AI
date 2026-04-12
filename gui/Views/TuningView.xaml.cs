@@ -21,7 +21,11 @@ namespace MedicAIGUI.Views
         {
             if (ProfileSelector.SelectedIndex == -1) return;
 
-            string profile = (ProfileSelector.SelectedItem as ComboBoxItem)?.Content.ToString();
+            var profile = (ProfileSelector.SelectedItem as ComboBoxItem)?.Content?.ToString();
+            if (string.IsNullOrWhiteSpace(profile))
+            {
+                return;
+            }
             
             // Ultra-precise professional tuning profiles
             if (profile.Contains("Balanced"))
