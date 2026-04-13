@@ -74,6 +74,8 @@ namespace MedicAIGUI
                 case "DashboardBtn": NavigateTo(new DashboardView()); break;
                 case "PriorityBtn":  NavigateTo(new PriorityPlayersView()); break;
                 case "SettingsBtn":  NavigateTo(new SettingsView()); break;
+                case "TuningBtn":    NavigateTo(new TuningView()); break;
+                case "MatrixBtn":    NavigateTo(new MatrixView()); break;
             }
         }
 

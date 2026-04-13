@@ -13,7 +13,7 @@ namespace MedicAIGUI.Services
         private static MedicBotService? _instance;
         public static MedicBotService Instance => _instance ??= new MedicBotService();
 
-        private readonly HttpClient _http = new HttpClient();
+        private HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         private readonly DispatcherTimer _pollTimer;
         private string _botBaseUrl = "http://127.0.0.1:5000";
 
@@ -44,7 +44,13 @@ namespace MedicAIGUI.Services
         {
             Settings = settings;
             SetBaseUrl(settings.BuildBaseUrl());
-            _http.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.RequestTimeoutSeconds));
+
+            // Create a fresh HttpClient so we can safely set Timeout
+            _http.Dispose();
+            _http = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.RequestTimeoutSeconds))
+            };
         }
 
         public void SetBaseUrl(string url)
@@ -191,6 +197,16 @@ namespace MedicAIGUI.Services
                 LogReceived?.Invoke("Error", $"Equip error: {ex.Message}");
                 return false;
             }
+        }
+
+        public Task<bool> StartBotAsync()
+        {
+            return SendCommandAsync("start", "Start bot");
+        }
+
+        public Task<bool> StopBotAsync()
+        {
+            return SendCommandAsync("stop", "Stop bot");
         }
 
         public Task<bool> DetectTeamAsync()

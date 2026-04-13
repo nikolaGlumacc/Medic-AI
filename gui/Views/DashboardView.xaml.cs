@@ -81,6 +81,12 @@ namespace MedicAIGUI.Views
                 SyncConfigBtn.IsEnabled = true;
                 FetchWeaponsBtn.IsEnabled = true;
                 DebugSnapshotBtn.IsEnabled = connected;
+                // Reset deploy state when connection drops
+                if (!connected)
+                {
+                    StartBotBtn.IsEnabled = true;
+                    StopBotBtn.IsEnabled = false;
+                }
             });
         }
 
@@ -256,6 +262,40 @@ namespace MedicAIGUI.Views
         private async void DebugSnapshotBtn_Click(object sender, RoutedEventArgs e)
         {
             await _service.DebugSnapshotAsync();
+        }
+
+        private async void StartBotBtn_Click(object sender, RoutedEventArgs e)
+        {
+            StartBotBtn.IsEnabled = false;
+            var ok = await _service.StartBotAsync();
+            if (ok)
+            {
+                StartBotBtn.IsEnabled = false;
+                StopBotBtn.IsEnabled = true;
+                AppendActivity("OK", "Bot deployed and running.");
+            }
+            else
+            {
+                StartBotBtn.IsEnabled = true;
+                AppendActivity("Error", "Failed to start bot — is the server running?");
+            }
+        }
+
+        private async void StopBotBtn_Click(object sender, RoutedEventArgs e)
+        {
+            StopBotBtn.IsEnabled = false;
+            var ok = await _service.StopBotAsync();
+            if (ok)
+            {
+                StartBotBtn.IsEnabled = true;
+                StopBotBtn.IsEnabled = false;
+                AppendActivity("Warn", "Bot stopped.");
+            }
+            else
+            {
+                StopBotBtn.IsEnabled = true;
+                AppendActivity("Error", "Stop command failed.");
+            }
         }
 
         private void SimulationBtn_Click(object sender, RoutedEventArgs e)

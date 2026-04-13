@@ -5,7 +5,6 @@
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -13,30 +12,48 @@
             <ColumnDefinition Width="1.8*"/>
         </Grid.ColumnDefinitions>
 
+        <!-- CONNECTION + DEPLOY -->
         <Border Grid.Row="0" Grid.Column="0" Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,16,16">
             <StackPanel>
-                <TextBlock Text="Connection" FontWeight="Bold" FontSize="18" Margin="0,0,0,16"/>
-                <WrapPanel Margin="0,0,0,16">
-                    <Button x:Name="RefreshBtn" Content="Refresh Status" Width="130" Height="38" Margin="0,0,10,10" Click="RefreshBtn_Click"/>
-                    <Button x:Name="SyncConfigBtn" Content="Sync Config" Width="120" Height="38" Margin="0,0,10,10" Click="SyncConfigBtn_Click"/>
-                    <Button x:Name="FetchWeaponsBtn" Content="Fetch Weapons" Width="130" Height="38" Margin="0,0,10,10" Click="FetchWeaponsBtn_Click"/>
-                    <Button x:Name="DebugSnapshotBtn" Content="Debug Snapshot" Width="130" Height="38" Margin="0,0,10,10" Click="DebugSnapshotBtn_Click"/>
-                    <Button x:Name="ReconnectBtn" Content="Toggle Simulation" Width="140" Height="38" Click="SimulationBtn_Click"/>
+                <TextBlock Text="Connection" FontWeight="Bold" FontSize="18" Margin="0,0,0,12"/>
+
+                <!-- START / STOP deploy row -->
+                <Grid Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="StartBotBtn" Content="▶  DEPLOY BOT" Height="44"
+                            Background="#39D98A" Foreground="#05080E" FontWeight="Bold"
+                            Margin="0,0,6,0" Click="StartBotBtn_Click"/>
+                    <Button x:Name="StopBotBtn" Grid.Column="1" Content="■  STOP BOT" Height="44"
+                            Background="#F2586B" Foreground="White" FontWeight="Bold"
+                            Margin="6,0,0,0" Click="StopBotBtn_Click" IsEnabled="False"/>
+                </Grid>
+
+                <WrapPanel Margin="0,0,0,12">
+                    <Button x:Name="RefreshBtn" Content="Refresh Status" Width="130" Height="36" Margin="0,0,8,8" Click="RefreshBtn_Click"/>
+                    <Button x:Name="SyncConfigBtn" Content="Sync Config" Width="110" Height="36" Margin="0,0,8,8" Click="SyncConfigBtn_Click"/>
+                    <Button x:Name="FetchWeaponsBtn" Content="Fetch Weapons" Width="125" Height="36" Margin="0,0,8,8" Click="FetchWeaponsBtn_Click"/>
+                    <Button x:Name="DebugSnapshotBtn" Content="Debug Snapshot" Width="125" Height="36" Margin="0,0,8,8" Click="DebugSnapshotBtn_Click" IsEnabled="False"/>
+                    <Button x:Name="ReconnectBtn" Content="Toggle Simulation" Width="140" Height="36" Click="SimulationBtn_Click"/>
                 </WrapPanel>
+
                 <TextBlock Text="Detected weapons" FontSize="12" Opacity="0.7"/>
-                <ListBox x:Name="WeaponsList" Height="110" Background="Transparent" BorderThickness="0" Foreground="LightGray"/>
+                <ListBox x:Name="WeaponsList" Height="100" Background="Transparent" BorderThickness="0" Foreground="LightGray"/>
             </StackPanel>
         </Border>
 
+        <!-- LIVE TELEMETRY -->
         <Border Grid.Row="0" Grid.Column="1" Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,0,16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="160"/>
+                    <RowDefinition Height="150"/>
                 </Grid.RowDefinitions>
-                <TextBlock Text="Live Telemetry" FontWeight="Bold" FontSize="18" Margin="0,0,0,16"/>
-                <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">
+                <TextBlock Text="Live Telemetry" FontWeight="Bold" FontSize="18" Margin="0,0,0,14"/>
+                <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,14">
                     <StackPanel>
                         <TextBlock Text="Healing" FontSize="12" Opacity="0.7"/>
                         <TextBlock x:Name="HealingStat" Text="0 HP/s" FontSize="22" FontWeight="Bold"/>
@@ -62,29 +79,31 @@
             </Grid>
         </Border>
 
+        <!-- ACTIVITY LOG (full-height, spans both columns) -->
         <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#101826" CornerRadius="18" Padding="20">
-            <DockPanel>
-                <TextBlock Text="Activity Log" FontWeight="Bold" FontSize="18" DockPanel.Dock="Left"/>
-                <TextBlock x:Name="ScrollStateText" Text="Auto-scroll" FontSize="12" Opacity="0.7" HorizontalAlignment="Right"/>
-            </DockPanel>
-        </Border>
-
-        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#101826" CornerRadius="18" Padding="20" Margin="0,16,0,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <WrapPanel Margin="0,0,0,16">
-                    <Button x:Name="CopyLogBtn" Content="Copy" Width="90" Height="36" Margin="0,0,10,10" Click="CopyLogBtn_Click"/>
-                    <Button x:Name="ScrollLockBtn" Content="Lock Scroll" Width="110" Height="36" Margin="0,0,10,10" Click="ScrollLockBtn_Click"/>
-                    <Button x:Name="FilterAllBtn" Content="All" Width="80" Height="36" Margin="0,0,10,10" Click="FilterAllBtn_Click"/>
-                    <Button x:Name="FilterOkBtn" Content="OK" Width="80" Height="36" Margin="0,0,10,10" Click="FilterOkBtn_Click"/>
-                    <Button x:Name="FilterErrBtn" Content="ERR" Width="80" Height="36" Margin="0,0,10,10" Click="FilterErrBtn_Click"/>
-                    <Button x:Name="FilterSyncBtn" Content="SYNC" Width="80" Height="36" Margin="0,0,10,10" Click="FilterSyncBtn_Click"/>
-                    <Button x:Name="FilterWarnBtn" Content="WARN" Width="80" Height="36" Margin="0,0,10,10" Click="FilterWarnBtn_Click"/>
-                    <TextBox x:Name="ActivitySearchBox" Width="220" Height="36" TextChanged="ActivitySearchBox_TextChanged"/>
-                </WrapPanel>
+
+                <!-- Log toolbar -->
+                <DockPanel Margin="0,0,0,12">
+                    <TextBlock Text="Activity Log" FontWeight="Bold" FontSize="18" VerticalAlignment="Center" DockPanel.Dock="Left" Margin="0,0,20,0"/>
+                    <TextBlock x:Name="ScrollStateText" Text="Auto-scroll" FontSize="12" Opacity="0.6" VerticalAlignment="Center" DockPanel.Dock="Right" Margin="10,0,0,0"/>
+                    <WrapPanel>
+                        <Button x:Name="CopyLogBtn"    Content="Copy"       Width="80"  Height="32" Margin="0,0,6,4" Click="CopyLogBtn_Click"/>
+                        <Button x:Name="ScrollLockBtn" Content="Lock Scroll" Width="105" Height="32" Margin="0,0,6,4" Click="ScrollLockBtn_Click"/>
+                        <Button x:Name="FilterAllBtn"  Content="All"        Width="60"  Height="32" Margin="0,0,6,4" Click="FilterAllBtn_Click"/>
+                        <Button x:Name="FilterOkBtn"   Content="OK"         Width="60"  Height="32" Margin="0,0,6,4" Click="FilterOkBtn_Click"/>
+                        <Button x:Name="FilterErrBtn"  Content="ERR"        Width="60"  Height="32" Margin="0,0,6,4" Click="FilterErrBtn_Click"/>
+                        <Button x:Name="FilterSyncBtn" Content="SYNC"       Width="60"  Height="32" Margin="0,0,6,4" Click="FilterSyncBtn_Click"/>
+                        <Button x:Name="FilterWarnBtn" Content="WARN"       Width="60"  Height="32" Margin="0,0,6,4" Click="FilterWarnBtn_Click"/>
+                        <TextBox x:Name="ActivitySearchBox" Width="200" Height="32" TextChanged="ActivitySearchBox_TextChanged"/>
+                    </WrapPanel>
+                </DockPanel>
+
+                <!-- Log output -->
                 <RichTextBox x:Name="LogOutput"
                              Grid.Row="1"
                              IsReadOnly="True"

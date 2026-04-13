@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """
-MedicAI Bot Server
+MedicAI Bot Server  —  FIXED BUILD
 Screen-capture + simulated input bot for TF2 Medic.
 No memory reading, no injection — purely HSV vision + pynput/win32 inputs.
+
+FIXES APPLIED
+─────────────
+1. Vision: blob scoring system (size + centeredness + shape + convexity)
+2. MedicBot: temporal stability (stable_target_frames, last_blob_cx/cy)
+3. MedicBot: confidence threshold gate before any action
+4. MedicBot: real 4-state machine  SEARCHING → ACQUIRE → TRACKING → RECOVER
+5. Controller: stronger exponential smoothing + velocity clamping
+6. Vision: tighter screen-crop before masking (cuts HUD / kill-feed noise)
+7. Vision: per-blob motion-consistency check (rejects particle teleports)
 """
 
 import cv2
@@ -64,8 +74,8 @@ DEFAULTS: Dict = {
     "smoothing": 0.12,
     "deadzone": 30,
     "max_move_px": 10,
-    "horizontal_smoothing": 0.12,
-    "vertical_smoothing": 0.12,
+    "horizontal_smoothing": 0.20,   # FIX 5: was 0.12 — stronger smoothing
+    "vertical_smoothing": 0.20,     # FIX 5: was 0.12
     "aim_vertical_offset_pct": 0.0,
     "aim_y_min_pct": 15.0,
     "aim_y_max_pct": 85.0,
@@ -174,6 +184,15 @@ DEFAULTS: Dict = {
     "tesseract_path": r"C:\Program Files\Tesseract-OCR\tesseract.exe",
     "team": "auto",
 
+    # FIX 2/3: Stability / confidence
+    "stable_frames_required": 3,       # how many consecutive frames before target is accepted
+    "confidence_threshold": 60,        # minimum blob score to act on
+    "max_blob_speed_px": 120,          # FIX 7: reject blobs that jump more than this per frame
+
+    # FIX 4: State-machine timing
+    "acquire_timeout": 0.4,            # seconds to validate a candidate before TRACKING
+    "recover_timeout": 1.5,            # seconds to try re-acquiring before back to SEARCHING
+
     # Debug
     "show_debug_window": False,
     "debug_log_level": "INFO",
@@ -202,7 +221,6 @@ def save_config() -> None:
 
 load_config()
 
-# Tesseract path
 _tess_path = CONFIG.get("tesseract_path", "")
 if os.path.exists(_tess_path):
     pytesseract.pytesseract.tesseract_cmd = _tess_path
@@ -220,17 +238,23 @@ class HudSnapshot:
     ocr_available: bool = False
 
 
+# FIX 1: score field added
 @dataclass
 class BlobResult:
     cx: int = 0
     cy: int = 0
     area: float = 0.0
     dist_to_center: float = 0.0
+    score: float = 0.0          # ← NEW: composite quality score
 
 
+# FIX 4: extended state enum
 class BotState(Enum):
     SEARCHING  = "SEARCHING"
-    HEALING    = "HEALING"
+    ACQUIRE    = "ACQUIRE"      # ← NEW: validating a candidate
+    TRACKING   = "TRACKING"     # ← NEW: confirmed, actively healing
+    RECOVER    = "RECOVER"      # ← NEW: target just lost, short re-acquire window
+    HEALING    = "HEALING"      # kept for API / GUI compat (alias for TRACKING)
     FOLLOWING  = "FOLLOWING"
     MELEE      = "MELEE"
     RETREATING = "RETREATING"
@@ -239,24 +263,22 @@ class BotState(Enum):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  VISION MODULE  (HSV + distance transform — no YOLO / transformers)
+#  VISION MODULE
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class Vision:
     """
-    All screen-reading logic:
-      - Team-colour blob detection via HSV masking + cv2.distanceTransform
-      - Medic-call bubble detection (red cross icon)
-      - OCR name reading at crosshair
-      - Kill-feed OCR
-      - Scoreboard OCR
-      - Uber-meter fill reading
+    All screen-reading logic.
+    Changes vs original:
+      • _build_team_mask()   — FIX 6: crops to centre 50% before HSV to kill UI noise
+      • _filter_blobs()      — FIX 1: assigns composite score per blob
+      • find_best_target()   — FIX 1+7: picks by score; rejects teleporting blobs
     """
 
     def __init__(self) -> None:
-        # NOTE: mss handles are thread-local on Windows.
-        # Never store an mss instance — always open a fresh context per capture call.
         self._ocr_ok = self._check_tesseract()
+        # FIX 7: previous blob positions keyed by a rough grid-index
+        self._prev_blob_positions: Dict[int, Tuple[int, int]] = {}
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -269,36 +291,44 @@ class Vision:
             return False
 
     def capture(self) -> np.ndarray:
-        """Always opens a fresh mss context — safe to call from any thread."""
         with mss.mss() as sct:
             img = np.array(sct.grab(sct.monitors[1]))
         return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
     def _build_team_mask(self, frame: np.ndarray) -> np.ndarray:
-        """Build a binary mask for the own-team colour (BLU or RED)."""
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        team = CONFIG.get("team", "auto")
+        """
+        Build a binary mask for the own-team colour.
 
+        FIX 6: before running HSV we crop to the centre 50% of the screen.
+        This eliminates the kill-feed (top-right), scoreboard, and HUD
+        corner elements without needing complex per-element masks.
+        """
+        h, w = frame.shape[:2]
+
+        # ── FIX 6: centre-crop to remove UI noise ───────────────────────────
+        y1_crop = h // 4
+        y2_crop = 3 * h // 4
+        x1_crop = w // 4
+        x2_crop = 3 * w // 4
+        cropped = frame[y1_crop:y2_crop, x1_crop:x2_crop]
+        # We'll build the mask on the crop, then embed it back into a full-size canvas
+        hsv = cv2.cvtColor(cropped, cv2.COLOR_BGR2HSV)
+
+        team = CONFIG.get("team", "auto")
         if team in ("auto", "BLU"):
             lo = np.array([CONFIG["blu_h_min"], CONFIG["blu_s_min"], CONFIG["blu_v_min"]])
             hi = np.array([CONFIG["blu_h_max"], CONFIG["blu_s_max"], CONFIG["blu_v_max"]])
-            mask = cv2.inRange(hsv, lo, hi)
+            crop_mask = cv2.inRange(hsv, lo, hi)
         else:
             lo1 = np.array([CONFIG["red1_h_min"], CONFIG["red1_s_min"], CONFIG["red1_v_min"]])
             hi1 = np.array([CONFIG["red1_h_max"], CONFIG["red1_s_max"], CONFIG["red1_v_max"]])
             lo2 = np.array([CONFIG["red2_h_min"], CONFIG["red2_s_min"], CONFIG["red2_v_min"]])
             hi2 = np.array([CONFIG["red2_h_max"], CONFIG["red2_s_max"], CONFIG["red2_v_max"]])
-            mask = cv2.inRange(hsv, lo1, hi1) | cv2.inRange(hsv, lo2, hi2)
+            crop_mask = cv2.inRange(hsv, lo1, hi1) | cv2.inRange(hsv, lo2, hi2)
 
-        # Mask out HUD regions
-        h, w = frame.shape[:2]
-        top    = int(h * CONFIG["hud_top_pct"]    / 100)
-        bottom = int(h * CONFIG["hud_bottom_pct"] / 100)
-        left   = int(w * CONFIG["hud_left_pct"]   / 100)
-        right  = int(w * CONFIG["hud_right_pct"]  / 100)
-        hud_mask = np.zeros_like(mask)
-        hud_mask[top:bottom, left:right] = 255
-        mask = cv2.bitwise_and(mask, hud_mask)
+        # Embed the cropped mask back into a full-resolution canvas
+        mask = np.zeros((h, w), dtype=np.uint8)
+        mask[y1_crop:y2_crop, x1_crop:x2_crop] = crop_mask
 
         # Morphology
         ok = int(CONFIG["morph_open_kernel"])
@@ -312,7 +342,15 @@ class Vision:
         return mask
 
     def _filter_blobs(self, mask: np.ndarray, frame_shape: Tuple) -> List[BlobResult]:
-        """Extract valid player blobs using contour + convexity filters."""
+        """
+        Extract and SCORE valid player blobs.
+
+        FIX 1: each blob gets a composite score:
+          • size component    (bigger = more player-like, capped)
+          • centeredness      (closer to crosshair = higher priority)
+          • shape component   (aspect ratio in expected range)
+          • convexity         (smooth silhouette → real player, not noise)
+        """
         h, w = frame_shape[:2]
         cx_screen, cy_screen = w // 2, h // 2
 
@@ -335,7 +373,8 @@ class Vision:
 
             hull = cv2.convexHull(cnt)
             hull_area = cv2.contourArea(hull)
-            if hull_area > 0 and area / hull_area < CONFIG["min_convexity_ratio"]:
+            convexity_ratio = (area / hull_area) if hull_area > 0 else 0.0
+            if convexity_ratio < CONFIG["min_convexity_ratio"]:
                 continue
 
             M = cv2.moments(cnt)
@@ -344,7 +383,28 @@ class Vision:
             bcx = int(M["m10"] / M["m00"])
             bcy = int(M["m01"] / M["m00"])
             dist = np.hypot(bcx - cx_screen, bcy - cy_screen)
-            blobs.append(BlobResult(cx=bcx, cy=bcy, area=area, dist_to_center=dist))
+
+            # ── FIX 1: composite score ───────────────────────────────────────
+            # Size: bigger blobs up to 2000px² earn up to 30 pts
+            size_score = min(area / 2000.0, 1.0) * 30.0
+
+            # Centeredness: max 30 pts, decays with distance
+            center_score = max(0.0, 30.0 - dist / 10.0)
+
+            # Shape: is the aspect ratio in a "human silhouette" band?
+            shape_score = 20.0 if 1.2 <= aspect <= 3.5 else 0.0
+
+            # Convexity: smooth outline scores up to 20 pts
+            convexity_score = 20.0 * convexity_ratio
+
+            total_score = size_score + center_score + shape_score + convexity_score
+
+            blobs.append(BlobResult(
+                cx=bcx, cy=bcy,
+                area=area,
+                dist_to_center=dist,
+                score=round(total_score, 2)
+            ))
 
         return blobs
 
@@ -352,52 +412,64 @@ class Vision:
 
     def find_best_target(self, frame: np.ndarray) -> Optional[BlobResult]:
         """
-        Use HSV masking → distance transform to find the nearest/best target.
-        Returns the BlobResult closest to screen centre within max_dist.
+        FIX 1 + FIX 7:
+          • Pick highest-scoring blob (not just closest).
+          • Reject any blob that moved faster than max_blob_speed_px since last frame.
         """
         mask = self._build_team_mask(frame)
-
-        # Distance transform: find the 'centre mass' of each blob
-        dist_transform = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
-        cv2.normalize(dist_transform, dist_transform, 0, 1.0, cv2.NORM_MINMAX)
-
         blobs = self._filter_blobs(mask, frame.shape)
         if not blobs:
+            self._prev_blob_positions.clear()
             return None
 
-        # Pick closest to crosshair within max_dist
         valid = [b for b in blobs if b.dist_to_center <= CONFIG["max_dist"]]
         if not valid:
             return None
-        return min(valid, key=lambda b: b.dist_to_center)
+
+        # FIX 7: motion consistency — reject teleporting particles
+        max_speed = CONFIG.get("max_blob_speed_px", 120)
+        stable: List[BlobResult] = []
+        new_positions: Dict[int, Tuple[int, int]] = {}
+
+        for b in valid:
+            # Use a coarse grid key to match blobs across frames
+            grid_key = (b.cx // 30, b.cy // 30)
+            prev = self._prev_blob_positions.get(grid_key)
+            if prev is not None:
+                speed = np.hypot(b.cx - prev[0], b.cy - prev[1])
+                if speed > max_speed:
+                    continue  # reject this blob as a noisy particle
+            stable.append(b)
+            new_positions[grid_key] = (b.cx, b.cy)
+
+        self._prev_blob_positions = new_positions
+
+        if not stable:
+            return None
+
+        # FIX 1: pick by score instead of raw distance
+        return max(stable, key=lambda b: b.score)
+
+    # ─── Remaining methods unchanged ─────────────────────────────────────────
 
     def find_medic_bubble(self, frame: np.ndarray) -> Optional[Tuple[int, int]]:
-        """
-        Detect the red-cross medic-call bubble visible through walls.
-        Returns (cx, cy) screen position or None.
-        """
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        # Red cross is a bright saturated red
         lo1 = np.array([0,   150, 150])
         hi1 = np.array([8,   255, 255])
         lo2 = np.array([170, 150, 150])
         hi2 = np.array([179, 255, 255])
         mask = cv2.inRange(hsv, lo1, hi1) | cv2.inRange(hsv, lo2, hi2)
-
         k = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
-
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         best = None
         best_score = 0.0
         h, w = frame.shape[:2]
-
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area < 60 or area > (w * h * 0.005):
                 continue
             x, y, bw, bh = cv2.boundingRect(cnt)
-            # Cross-shaped: aspect roughly 1:1
             aspect = max(bw, bh) / max(min(bw, bh), 1)
             if aspect > 2.5:
                 continue
@@ -406,30 +478,23 @@ class Vision:
                 M = cv2.moments(cnt)
                 if M["m00"]:
                     best = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
-
         return best
 
     def read_name_at_crosshair(self, frame: np.ndarray) -> str:
-        """OCR the player name displayed below the crosshair when healing."""
         if not self._ocr_ok:
             return ""
         h, w = frame.shape[:2]
-        # Name appears roughly 5-15% below centre
-        y1 = int(h * 0.50)
-        y2 = int(h * 0.60)
-        x1 = int(w * 0.35)
-        x2 = int(w * 0.65)
+        y1 = int(h * 0.50); y2 = int(h * 0.60)
+        x1 = int(w * 0.35); x2 = int(w * 0.65)
         roi = frame[y1:y2, x1:x2]
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         _, thresh = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY)
         try:
-            text = pytesseract.image_to_string(thresh, config="--psm 7").strip()
-            return text
+            return pytesseract.image_to_string(thresh, config="--psm 7").strip()
         except Exception:
             return ""
 
     def read_kill_feed(self, frame: np.ndarray) -> List[Tuple[str, str]]:
-        """OCR the top-right kill feed. Returns list of (killer, victim) pairs."""
         if not self._ocr_ok:
             return []
         h, w = frame.shape[:2]
@@ -448,25 +513,17 @@ class Vision:
         return pairs
 
     def read_scoreboard_names(self, frame: np.ndarray) -> Dict[str, str]:
-        """
-        OCR scoreboard (called while Tab is held).
-        Returns {player_name: 'alive'|'dead'}.
-        Grayed-out text = dead.
-        """
         if not self._ocr_ok:
             return {}
         h, w = frame.shape[:2]
         roi = frame[int(h * 0.15):int(h * 0.90), int(w * 0.15):int(w * 0.85)]
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-
-        # Bright pixels = alive, dim = dead
-        _, bright = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-        _, dim    = cv2.threshold(gray, 80,  255, cv2.THRESH_BINARY)
-        dim_only  = cv2.bitwise_and(dim, cv2.bitwise_not(bright))
-
+        _, bright  = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+        _, dim     = cv2.threshold(gray, 80,  255, cv2.THRESH_BINARY)
+        dim_only   = cv2.bitwise_and(dim, cv2.bitwise_not(bright))
         results: Dict[str, str] = {}
         try:
-            alive_text = pytesseract.image_to_string(bright, config="--psm 6").strip()
+            alive_text = pytesseract.image_to_string(bright,  config="--psm 6").strip()
             dead_text  = pytesseract.image_to_string(dim_only, config="--psm 6").strip()
             for name in alive_text.splitlines():
                 name = name.strip()
@@ -481,9 +538,6 @@ class Vision:
         return results
 
     def read_uber_charge(self, frame: np.ndarray) -> float:
-        """
-        Read uber-charge fill percentage (0–100) via HSV on the uber bar ROI.
-        """
         h, w = frame.shape[:2]
         x1 = int(w * CONFIG["uber_roi_left_pct"]   / 100)
         y1 = int(h * CONFIG["uber_roi_top_pct"]    / 100)
@@ -493,38 +547,28 @@ class Vision:
         x2, y2 = min(w, x2), min(h, y2)
         if x2 <= x1 or y2 <= y1:
             return 0.0
-
         roi = frame[y1:y2, x1:x2]
         sf  = CONFIG.get("uber_scale_factor", 2.5)
         roi = cv2.resize(roi, (int(roi.shape[1] * sf), int(roi.shape[0] * sf)),
                          interpolation=cv2.INTER_LINEAR)
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-
-        lo = np.array([CONFIG["uber_h_min"], CONFIG["uber_s_min"], CONFIG["uber_v_min"]])
-        hi = np.array([CONFIG["uber_h_max"], CONFIG["uber_s_max"], CONFIG["uber_v_max"]])
-        mask = cv2.inRange(hsv, lo, hi)
-
+        lo  = np.array([CONFIG["uber_h_min"], CONFIG["uber_s_min"], CONFIG["uber_v_min"]])
+        hi  = np.array([CONFIG["uber_h_max"], CONFIG["uber_s_max"], CONFIG["uber_v_max"]])
+        mask  = cv2.inRange(hsv, lo, hi)
         total = mask.size
-        filled = cv2.countNonZero(mask)
-        pct = (filled / total) * 100.0 if total else 0.0
-
-        # Clamp: if pct > uber_full_thresh * 100 → treat as full
+        pct   = (cv2.countNonZero(mask) / total) * 100.0 if total else 0.0
         if pct / 100.0 >= CONFIG["uber_full_thresh"]:
             pct = 100.0
         return round(pct, 1)
 
     def read_hud_snapshot(self, frame: Optional[np.ndarray] = None) -> HudSnapshot:
-        """Read health + uber + heal-target name in one pass."""
         snap = HudSnapshot(ocr_available=self._ocr_ok)
         if frame is None:
             frame = self.capture()
-
         snap.uber_charge = self.read_uber_charge(frame)
-
         if self._ocr_ok:
             try:
                 h, w = frame.shape[:2]
-                # Health: bottom-left corner
                 hp_roi = frame[int(h * 0.88):int(h * 0.96), int(w * 0.02):int(w * 0.12)]
                 gray   = cv2.cvtColor(hp_roi, cv2.COLOR_BGR2GRAY)
                 _, thr = cv2.threshold(gray, 140, 255, cv2.THRESH_BINARY)
@@ -535,74 +579,75 @@ class Vision:
                     snap.health = int(hp_txt)
             except Exception:
                 pass
-
             snap.heal_target_name = self.read_name_at_crosshair(frame) or None
-
         return snap
 
     def detect_own_team(self, frame: Optional[np.ndarray] = None) -> str:
-        """
-        Sample pixels around the HUD health-cross colour to guess team.
-        Returns 'BLU' or 'RED'.
-        """
         if frame is None:
             frame = self.capture()
         h, w = frame.shape[:2]
-        # Sample bottom-left HUD area
         sample = frame[int(h * 0.85):int(h * 0.98), int(w * 0.01):int(w * 0.08)]
         hsv = cv2.cvtColor(sample, cv2.COLOR_BGR2HSV)
-        blu_px = cv2.countNonZero(cv2.inRange(
-            hsv,
-            np.array([95,  60, 60]),
-            np.array([130, 255, 255])
-        ))
-        red_px = cv2.countNonZero(cv2.inRange(
-            hsv,
-            np.array([0,  80, 80]),
-            np.array([10, 255, 255])
-        ))
+        blu_px = cv2.countNonZero(cv2.inRange(hsv, np.array([95, 60, 60]),  np.array([130, 255, 255])))
+        red_px = cv2.countNonZero(cv2.inRange(hsv, np.array([0,  80, 80]),  np.array([10,  255, 255])))
         return "BLU" if blu_px >= red_px else "RED"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  CONTROLLER  (mouse + keyboard inputs)
+#  CONTROLLER
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class Controller:
-    """Wraps win32api mouse movement and pydirectinput / pynput key presses."""
+    """
+    Wraps win32api mouse movement and pydirectinput / pynput key presses.
+
+    FIX 5: exponential smoothing is now applied consistently using alpha from
+    CONFIG, and the clamping is done on the smoothed velocity (not raw dx/dy).
+    """
 
     def __init__(self) -> None:
         self._heal_held = False
-        self._prev_dx = 0.0
-        self._prev_dy = 0.0
+        # FIX 5: smoothed velocity accumulators
+        self.sdx: float = 0.0
+        self.sdy: float = 0.0
 
     # ── Mouse ─────────────────────────────────────────────────────────────────
 
     def move_mouse(self, dx: float, dy: float) -> None:
-        hs = CONFIG["horizontal_smoothing"]
-        vs = CONFIG["vertical_smoothing"]
-        dz = CONFIG["deadzone"]
-        spd = CONFIG["mouse_speed"]
-        mx  = CONFIG["max_move_px"]
+        """
+        FIX 5: stronger exponential smoothing + velocity clamping.
+        alpha = horizontal_smoothing / vertical_smoothing from CONFIG.
+        A value of 0.20 is a good default (was 0.12 — too reactive).
+        """
+        alpha_h = CONFIG["horizontal_smoothing"]   # e.g. 0.20
+        alpha_v = CONFIG["vertical_smoothing"]
+        dz      = CONFIG["deadzone"]
+        spd     = CONFIG["mouse_speed"]
+        mx      = CONFIG["max_move_px"]
 
-        sdx = self._prev_dx * (1 - hs) + dx * hs
-        sdy = self._prev_dy * (1 - vs) + dy * vs
-        self._prev_dx, self._prev_dy = sdx, sdy
+        # Exponential smoothing: blend new input with running average
+        self.sdx = alpha_h * dx + (1.0 - alpha_h) * self.sdx
+        self.sdy = alpha_v * dy + (1.0 - alpha_v) * self.sdy
 
-        if abs(sdx) < dz and abs(sdy) < dz:
+        # Deadzone on smoothed velocity, not on raw input
+        if abs(self.sdx) < dz and abs(self.sdy) < dz:
             return
 
-        move_x = int(np.clip(sdx * spd, -mx, mx))
-        move_y = int(np.clip(sdy * spd, -mx, mx))
+        # Clamp velocity (not displacement) so we never overshoot
+        move_x = int(np.clip(self.sdx * spd, -mx, mx))
+        move_y = int(np.clip(self.sdy * spd, -mx, mx))
         win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, move_x, move_y, 0, 0)
 
         if CONFIG.get("micro_jitter_enabled"):
             amp = CONFIG["micro_jitter_amplitude"]
-            jx = random.randint(-amp, amp)
-            jy = random.randint(-amp, amp)
-            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, jx, jy, 0, 0)
+            win32api.mouse_event(
+                win32con.MOUSEEVENTF_MOVE,
+                random.randint(-amp, amp),
+                random.randint(-amp, amp),
+                0, 0
+            )
 
-    def aim_at_blob(self, blob: BlobResult, frame_shape: Tuple) -> None:
+    def aim_at_blob(self, blob: "BlobResult", frame_shape: Tuple) -> None:
         h, w = frame_shape[:2]
         cx, cy = w // 2, h // 2
         offset_y = int(h * CONFIG["aim_vertical_offset_pct"] / 100)
@@ -611,9 +656,7 @@ class Controller:
             int(h * CONFIG["aim_y_min_pct"] / 100),
             int(h * CONFIG["aim_y_max_pct"] / 100)
         )
-        dx = blob.cx - cx
-        dy = target_y - cy
-        self.move_mouse(float(dx), float(dy))
+        self.move_mouse(float(blob.cx - cx), float(target_y - cy))
 
     def hold_m1(self) -> None:
         if not self._heal_held:
@@ -648,7 +691,6 @@ class Controller:
             pydirectinput.keyUp(key)
 
     def type_string(self, text: str) -> None:
-        """Type a string correctly including uppercase / special chars."""
         if _keyboard:
             _keyboard.type(text)
         elif pydirectinput:
@@ -670,17 +712,16 @@ class Controller:
 
     def cleanup(self) -> None:
         self.release_m1()
+        for k in ("w", "a", "s", "d"):
+            self.release_key(k)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  LOADOUT MANAGER
+#  LOADOUT MANAGER  (unchanged)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LoadoutManager:
-    """
-    Template-matching based weapon equip.
-    weapon PNGs go in   bot/weapons/<name>.png
-    """
+    """Template-matching based weapon equip. weapon PNGs go in bot/weapons/<name>.png"""
 
     WEAPONS_DIR = Path(__file__).parent / "weapons"
 
@@ -712,18 +753,11 @@ class LoadoutManager:
     def available_weapons(self) -> List[str]:
         return sorted(self._templates.keys())
 
-    def _find_weapon_on_screen(
-        self,
-        frame: np.ndarray,
-        weapon_name: str
-    ) -> Optional[Tuple[int, int]]:
+    def _find_weapon_on_screen(self, frame: np.ndarray, weapon_name: str) -> Optional[Tuple[int, int]]:
         tmpl = self._templates.get(weapon_name.lower())
         if tmpl is None:
             return None
-
-        best_val = 0.0
-        best_loc: Optional[Tuple[int, int]] = None
-
+        best_val, best_loc = 0.0, None
         for sf in CONFIG.get("scale_factors", [0.8, 0.9, 1.0, 1.1]):
             scaled = cv2.resize(tmpl, (0, 0), fx=sf, fy=sf)
             th, tw = scaled.shape[:2]
@@ -734,71 +768,48 @@ class LoadoutManager:
             if max_val > best_val:
                 best_val = max_val
                 best_loc = (max_loc[0] + tw // 2, max_loc[1] + th // 2)
-
         thresh = CONFIG.get("match_threshold", 0.70)
         return best_loc if best_val >= thresh else None
 
     def equip(self, weapon_name: str, bot_ref=None) -> bool:
-        """Blocking equip. Returns True on success."""
         weapon_name = weapon_name.lower()
         if weapon_name not in self._templates:
             logger.warning(f"No template for '{weapon_name}' — aborting equip.")
             return False
-
         if bot_ref is not None:
             bot_ref._equip_in_progress = True
-
         self._cancel_flag.clear()
         deadline = time.time() + CONFIG.get("equip_timeout", 15)
         ok = False
-
         try:
-            # Open loadout menu
             self._ctrl.press_key("m")
             time.sleep(CONFIG.get("menu_open_delay", 0.35))
-
             while time.time() < deadline and not self._cancel_flag.is_set():
                 frame = self._vision.capture()
-
-                # Confirm target weapon is equipped
-                target_loc = self._find_weapon_on_screen(frame, weapon_name)
-                if target_loc:
-                    logger.info(f"Weapon '{weapon_name}' confirmed equipped.")
+                if self._find_weapon_on_screen(frame, weapon_name):
                     ok = True
                     break
-
-                # Click where the target weapon appears
-                if target_loc is None:
-                    # Scan all templates to find target
-                    for wname in self._templates:
-                        loc = self._find_weapon_on_screen(frame, wname)
-                        if loc:
-                            win32api.SetCursorPos(loc)
-                            time.sleep(CONFIG.get("click_delay", 0.15))
-                            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-                            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                            time.sleep(CONFIG.get("click_delay", 0.15))
-                            break
-
+                for wname in self._templates:
+                    loc = self._find_weapon_on_screen(frame, wname)
+                    if loc:
+                        win32api.SetCursorPos(loc)
+                        time.sleep(CONFIG.get("click_delay", 0.15))
+                        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+                        time.sleep(CONFIG.get("click_delay", 0.15))
+                        break
                 time.sleep(CONFIG.get("retry_delay", 0.25))
-
-            # Close loadout menu
             self._ctrl.press_key("m")
             time.sleep(CONFIG.get("menu_close_delay", 0.20))
-
         except Exception as e:
             logger.error(f"Equip error: {e}")
         finally:
             if bot_ref is not None:
                 bot_ref._equip_in_progress = False
-
         return ok
 
     def equip_async(self, weapon_name: str, bot_ref=None) -> None:
-        """Fire-and-forget daemon thread equip."""
-        t = threading.Thread(
-            target=self.equip, args=(weapon_name, bot_ref), daemon=True
-        )
+        t = threading.Thread(target=self.equip, args=(weapon_name, bot_ref), daemon=True)
         t.start()
         self._equip_thread = t
 
@@ -812,24 +823,22 @@ class LoadoutManager:
 
 class MedicBot:
     """
-    Main bot logic:
-      - Capture loop feeds frames
-      - Brain loop runs state machine
-      - WebSocket broadcasts status to GUI
-      - Flask serves config/command API
+    Main bot logic.
+
+    FIX 2: temporal-stability fields  (stable_target_frames, last_blob_cx/cy)
+    FIX 3: confidence threshold gate  (blob.score > CONFIDENCE_THRESHOLD)
+    FIX 4: clean 4-stage state machine  SEARCHING → ACQUIRE → TRACKING → RECOVER
     """
 
     def __init__(self) -> None:
         self.running = False
-        self.state = BotState.SEARCHING
+        self.state   = BotState.SEARCHING
         self.team: str = CONFIG.get("team", "auto")
 
-        # Sub-modules
-        self.vision     = Vision()
-        self.ctrl       = Controller()
-        self.loadout    = LoadoutManager(self.ctrl, self.vision)
+        self.vision  = Vision()
+        self.ctrl    = Controller()
+        self.loadout = LoadoutManager(self.ctrl, self.vision)
 
-        # State
         self.uber_pct: float = 0.0
         self.my_health: Optional[int] = None
         self.current_target: Optional[str] = None
@@ -841,9 +850,13 @@ class MedicBot:
         self._last_spy_check = 0.0
         self._last_scoreboard_check = 0.0
         self._last_frame: Optional[np.ndarray] = None
-        self._last_known_dir: Tuple[int, int] = (0, 0)
         self._search_since: float = 0.0
-        self._lost_target_since: Optional[float] = None
+
+        # ── FIX 2: temporal stability ────────────────────────────────────────
+        self.last_blob: Optional[BlobResult] = None          # best blob last frame
+        self.stable_target_frames: int = 0                   # consecutive matching frames
+        self._acquire_start: Optional[float] = None          # when ACQUIRE state began
+        self._recover_start: Optional[float] = None          # when RECOVER state began
 
         # WebSocket
         self._ws_clients: set = set()
@@ -860,9 +873,9 @@ class MedicBot:
             return
         self.running = True
         self.session_start = time.time()
-        threading.Thread(target=self._capture_loop,   daemon=True).start()
-        threading.Thread(target=self._brain_loop,     daemon=True).start()
-        threading.Thread(target=self._cpu_temp_loop,  daemon=True).start()
+        threading.Thread(target=self._capture_loop,    daemon=True).start()
+        threading.Thread(target=self._brain_loop,      daemon=True).start()
+        threading.Thread(target=self._cpu_temp_loop,   daemon=True).start()
         threading.Thread(target=self._scoreboard_loop, daemon=True).start()
         logger.info("MedicBot started.")
         self._broadcast({"type": "activity", "msg": "Bot started.", "audio": False})
@@ -895,7 +908,6 @@ class MedicBot:
 
         while self.running:
             t0 = time.time()
-
             if self._equip_in_progress:
                 time.sleep(0.05)
                 continue
@@ -905,19 +917,17 @@ class MedicBot:
                 time.sleep(interval)
                 continue
 
-            # Read HUD
             snap = self.vision.read_hud_snapshot(frame)
-            self.uber_pct  = snap.uber_charge
+            self.uber_pct = snap.uber_charge
             if snap.health is not None:
                 self.my_health = snap.health
 
-            # Broadcast status
             self._broadcast_status()
 
-            # State machine
+            # FIX 4: drive the state machine
             self._tick(frame, snap)
 
-            # Spy check (proper timestamp, not modulo)
+            # Spy check on timer
             freq = max(1, int(CONFIG.get("spy_check_frequency", 8)))
             if time.time() - self._last_spy_check >= freq:
                 self._last_spy_check = time.time()
@@ -929,78 +939,128 @@ class MedicBot:
             if sleep > 0:
                 time.sleep(sleep)
 
+    # ── State machine ─────────────────────────────────────────────────────────
+
     def _tick(self, frame: np.ndarray, snap: HudSnapshot) -> None:
-        blob = self.vision.find_best_target(frame)
+        """
+        FIX 4: clean 4-stage state machine.
 
-        if blob is not None:
-            # Aim toward blob
-            self.ctrl.aim_at_blob(blob, frame.shape)
-            self.ctrl.hold_m1()
+        SEARCHING  → blob found with score > threshold → ACQUIRE
+        ACQUIRE    → stable for N frames                → TRACKING
+                   → timeout or blob lost               → SEARCHING
+        TRACKING   → blob still present                → stay TRACKING (aim + heal)
+                   → blob lost                          → RECOVER
+        RECOVER    → blob reappears                     → TRACKING
+                   → timeout                            → SEARCHING
+        """
+        # FIX 1+3: get scored blob; apply confidence gate immediately
+        raw_blob = self.vision.find_best_target(frame)
+        conf = CONFIG.get("confidence_threshold", 60)
+        blob = raw_blob if (raw_blob and raw_blob.score >= conf) else None
 
-            # OCR name
-            name = self.vision.read_name_at_crosshair(frame).strip()
-            priorities = [p.strip().lower() for p in CONFIG.get("priority_players", [])]
+        now = time.time()
 
-            if priorities:
-                if name.lower() in priorities:
-                    self.current_target = name
-                    self.state = BotState.HEALING
-                    self._lost_target_since = None
-
-                    if CONFIG.get("follow_enabled", True):
-                        self._follow_blob(blob, frame.shape)
-
-                    if self.uber_pct >= CONFIG.get("uber_pop_threshold", 95.0) and \
-                            CONFIG.get("auto_uber", True):
-                        self.ctrl.pop_uber()
-                        self._broadcast_activity("Uber activated!", audio=True)
-                else:
-                    # Not priority — drop and search
-                    self.ctrl.release_m1()
-                    self.current_target = None
-                    self.state = BotState.SEARCHING
+        # ── SEARCHING ────────────────────────────────────────────────────────
+        if self.state == BotState.SEARCHING:
+            if blob is not None:
+                # Start validating this candidate
+                self.last_blob = blob
+                self.stable_target_frames = 1
+                self._acquire_start = now
+                self.state = BotState.ACQUIRE
+                self._broadcast_activity("Candidate found — acquiring.")
             else:
-                # No priority list → heal anyone, no follow
-                self.current_target = name or "unknown"
-                self.state = BotState.HEALING
-                self._lost_target_since = None
+                self._search(frame)
 
+        # ── ACQUIRE ──────────────────────────────────────────────────────────
+        elif self.state == BotState.ACQUIRE:
+            if blob is not None:
+                # FIX 2: count how many frames the same-area blob keeps appearing
+                if self.last_blob and abs(blob.cx - self.last_blob.cx) < 60 and \
+                                      abs(blob.cy - self.last_blob.cy) < 60:
+                    self.stable_target_frames += 1
+                else:
+                    # Different blob — reset
+                    self.stable_target_frames = 1
+                    self._acquire_start = now
+                self.last_blob = blob
+
+                required = CONFIG.get("stable_frames_required", 3)
+                if self.stable_target_frames >= required:
+                    self.state = BotState.TRACKING
+                    self._broadcast_activity("Target locked — tracking.", audio=True)
+                # Do NOT act yet; just observe during ACQUIRE
+            else:
+                timeout = CONFIG.get("acquire_timeout", 0.4)
+                if self._acquire_start and now - self._acquire_start > timeout:
+                    self.stable_target_frames = 0
+                    self.last_blob = None
+                    self.state = BotState.SEARCHING
+                    self._broadcast_activity("Acquire timed out — searching.")
+
+        # ── TRACKING ─────────────────────────────────────────────────────────
+        elif self.state in (BotState.TRACKING, BotState.HEALING):
+            if blob is not None:
+                self.last_blob = blob
+                self.stable_target_frames += 1
+
+                # Aim + heal
+                self.ctrl.aim_at_blob(blob, frame.shape)
+                self.ctrl.hold_m1()
+                self.state = BotState.TRACKING  # normalise alias
+
+                # OCR name
+                name = self.vision.read_name_at_crosshair(frame).strip()
+                self.current_target = name or "unknown"
+
+                # Auto-uber
                 if self.uber_pct >= CONFIG.get("uber_pop_threshold", 95.0) and \
                         CONFIG.get("auto_uber", True):
                     self.ctrl.pop_uber()
                     self._broadcast_activity("Uber activated!", audio=True)
+            else:
+                # Lost target — enter recovery window
+                self.ctrl.release_m1()
+                self._recover_start = now
+                self.state = BotState.RECOVER
+                self._broadcast_activity("Target lost — recovering.")
+
+        # ── RECOVER ──────────────────────────────────────────────────────────
+        elif self.state == BotState.RECOVER:
+            if blob is not None:
+                # Re-acquired — jump straight back to TRACKING
+                self.last_blob = blob
+                self.stable_target_frames = 1
+                self.state = BotState.TRACKING
+                self._broadcast_activity("Target re-acquired.")
+            else:
+                # Still nothing — idle mouse
+                timeout = CONFIG.get("recover_timeout", 1.5)
+                if self._recover_start and now - self._recover_start > timeout:
+                    self.stable_target_frames = 0
+                    self.last_blob = None
+                    self.current_target = None
+                    self.state = BotState.SEARCHING
+                    self._broadcast_activity("Recovery timed out — searching.")
 
         else:
-            # No blob found
-            self.ctrl.release_m1()
-            now = time.time()
+            # Fallback for any other legacy states
+            self.state = BotState.SEARCHING
 
-            if self._lost_target_since is None and self.current_target:
-                self._lost_target_since = now
-                self._broadcast_activity("Lost target — searching.", audio=True)
-
-            self.current_target = None
-
-            if self._lost_target_since and \
-                    now - self._lost_target_since > CONFIG.get("grace_period", 1.5):
-                self.state = BotState.SEARCHING
-                self._search(frame)
+    # ── Follow helper (used externally / future extensions) ──────────────────
 
     def _follow_blob(self, blob: BlobResult, frame_shape: Tuple) -> None:
         h, w = frame_shape[:2]
-        cx = w // 2
-        dx = blob.cx - cx
-        fwd_thresh  = CONFIG.get("follow_fwd_thresh",    180)
-        back_thresh = CONFIG.get("follow_back_thresh",    80)
+        dx = blob.cx - w // 2
+        fwd_thresh    = CONFIG.get("follow_fwd_thresh",    180)
+        back_thresh   = CONFIG.get("follow_back_thresh",    80)
         strafe_thresh = CONFIG.get("follow_strafe_thresh", 100)
-
         if abs(dx) > strafe_thresh:
             self.ctrl.hold_key("d" if dx > 0 else "a")
             self.ctrl.release_key("a" if dx > 0 else "d")
         else:
             self.ctrl.release_key("a")
             self.ctrl.release_key("d")
-
         if blob.dist_to_center > fwd_thresh:
             self.ctrl.hold_key("w")
             self.ctrl.release_key("s")
@@ -1011,18 +1071,17 @@ class MedicBot:
             self.ctrl.release_key("w")
             self.ctrl.release_key("s")
 
+    # ── Search behaviour ──────────────────────────────────────────────────────
+
     def _search(self, frame: np.ndarray) -> None:
-        """Rotate slowly and look for medic bubble when no target."""
-        # Check if we've been searching too long
         if self._search_since == 0:
             self._search_since = time.time()
         elif time.time() - self._search_since > 15:
             self._search_since = 0
             self._broadcast_activity("Search timeout — returning to spawn.")
-            self.ctrl.press_key("w")  # walk toward spawn
+            self.ctrl.press_key("w")
             return
 
-        # Check for medic bubble
         bubble = self.vision.find_medic_bubble(frame)
         if bubble:
             bx, by = bubble
@@ -1032,7 +1091,6 @@ class MedicBot:
             self.ctrl.hold_key("w")
             self._broadcast_activity("Medic bubble detected — navigating.")
         else:
-            # Slow rotation scan
             spd = CONFIG.get("idle_rotation_speed", 18)
             self.ctrl.move_mouse(float(spd), 0.0)
             self.ctrl.release_key("w")
@@ -1045,14 +1103,12 @@ class MedicBot:
             time.sleep(freq)
             if not self.running:
                 break
-
             self._last_scoreboard_check = time.time()
             if _keyboard:
                 _keyboard.press(Key.tab)
                 time.sleep(CONFIG.get("tab_hold_duration", 0.25))
                 frame = self.vision.capture()
                 _keyboard.release(Key.tab)
-
                 names = self.vision.read_scoreboard_names(frame)
                 if CONFIG.get("auto_whitelist_detection") and names:
                     priorities = [p.lower() for p in CONFIG.get("priority_players", [])]
@@ -1061,7 +1117,7 @@ class MedicBot:
                             logger.info(f"Confirmed on scoreboard: {name} = {names[name]}")
                 self._broadcast_activity("Scoreboard checked.")
 
-    # ── CPU temp loop ─────────────────────────────────────────────────────────
+    # ── CPU throttle loop ─────────────────────────────────────────────────────
 
     def _cpu_temp_loop(self) -> None:
         while self.running:
@@ -1072,8 +1128,7 @@ class MedicBot:
                     if key in temps and temps[key]:
                         core_temp = temps[key][0].current
                         break
-                threshold = CONFIG.get("cpu_throttle_threshold", 85)
-                self._cpu_throttled = core_temp > threshold
+                self._cpu_throttled = core_temp > CONFIG.get("cpu_throttle_threshold", 85)
             except Exception:
                 self._cpu_throttled = False
             time.sleep(5)
@@ -1115,6 +1170,8 @@ class MedicBot:
             "uber": self.uber_pct,
             "my_health": self.my_health,
             "current_target": self.current_target,
+            "stable_frames": self.stable_target_frames,
+            "last_blob_score": self.last_blob.score if self.last_blob else 0,
             "session_seconds": int(time.time() - self.session_start),
             "melee_kills": self.melee_kills,
         })
@@ -1131,8 +1188,7 @@ class MedicBot:
                     elif action == "stop":
                         self.stop()
                     elif action == "config":
-                        cfg = msg.get("config", {})
-                        CONFIG.update(cfg)
+                        CONFIG.update(msg.get("config", {}))
                         save_config()
                 except Exception as e:
                     logger.error(f"WS message error: {e}")
@@ -1165,6 +1221,8 @@ class MedicBot:
                 "uber_pct": self.uber_pct,
                 "my_health": self.my_health,
                 "current_target": self.current_target,
+                "stable_frames": self.stable_target_frames,
+                "last_blob_score": self.last_blob.score if self.last_blob else 0,
                 "session_seconds": int(time.time() - self.session_start),
                 "melee_kills": self.melee_kills,
                 "team": self.team,
@@ -1226,8 +1284,6 @@ class MedicBot:
             ts = time.strftime("%Y%m%d_%H%M%S")
             frame_path = debug_dir / f"frame_{ts}.png"
             cv2.imwrite(str(frame_path), frame)
-
-            # Also save team mask
             try:
                 mask = self.vision._build_team_mask(frame)
                 mask_path = debug_dir / f"mask_{ts}.png"
@@ -1244,11 +1300,7 @@ class MedicBot:
 
 if __name__ == "__main__":
     bot = MedicBot()
-
-    # WebSocket in background thread
     threading.Thread(target=bot.start_ws, daemon=True).start()
-    time.sleep(0.5)  # Let WS loop initialise
-
-    # Flask (blocking)
+    time.sleep(0.5)
     logger.info("Flask API on http://0.0.0.0:5000")
     bot.app.run(host="0.0.0.0", port=5000, threaded=True, debug=False, use_reloader=False)

@@ -1,10 +1,7 @@
 <UserControl x:Class="MedicAIGUI.Views.MatrixView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d"
-             d:DesignHeight="800" d:DesignWidth="1000">
+             Foreground="White">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -14,90 +11,136 @@
 
         <!-- HEADER -->
         <Border Padding="30,30,30,0">
-            <StackPanel>
-                <TextBlock Text="TRIAGE PRIORITY MATRIX" FontSize="22" FontWeight="Bold" Foreground="White" Margin="0,0,5,0"/>
-                <TextBlock Text="Real-time unit analysis and heuristic heal-priority weights." Style="{StaticResource MicroLabel}"/>
-            </StackPanel>
+            <Grid>
+                <StackPanel>
+                    <TextBlock Text="TRIAGE PRIORITY MATRIX" FontSize="22" FontWeight="Bold" Foreground="White"/>
+                    <TextBlock Text="Live priority player roster and heal-weight assignments." Style="{StaticResource MicroLabel}"/>
+                </StackPanel>
+                <Button Content="REFRESH" HorizontalAlignment="Right" Width="100" Height="36"
+                        Click="RefreshBtn_Click"/>
+            </Grid>
         </Border>
 
-        <!-- MAIN MATRIX CONTENT -->
+        <!-- MAIN CONTENT -->
         <Grid Grid.Row="1" Margin="30">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="320"/>
             </Grid.ColumnDefinitions>
 
-            <!-- UNIT LIST (SIMULATED FOR PREMIUM LOOK) -->
-            <Border Background="{StaticResource BgCardBrush}" CornerRadius="28" Padding="25" BorderBrush="#15FFFFFF" BorderThickness="1" Margin="0,0,20,0">
+            <!-- PLAYER LIST -->
+            <Border Background="{StaticResource BgCardBrush}" CornerRadius="28" Padding="25"
+                    BorderBrush="#15FFFFFF" BorderThickness="1" Margin="0,0,20,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    
-                    <UniformGrid Columns="4" Margin="10,0,10,15">
-                        <TextBlock Text="UNIT IDENTIFIER" Style="{StaticResource MicroLabel}"/>
-                        <TextBlock Text="CLASS" Style="{StaticResource MicroLabel}"/>
-                        <TextBlock Text="VITAL STABILITY" Style="{StaticResource MicroLabel}"/>
-                        <TextBlock Text="HEAL WEIGHT" HorizontalAlignment="Right" Style="{StaticResource MicroLabel}"/>
+
+                    <!-- Column headers -->
+                    <UniformGrid Columns="4" Margin="10,0,10,10">
+                        <TextBlock Text="PLAYER NAME"     Style="{StaticResource MicroLabel}"/>
+                        <TextBlock Text="TIER"            Style="{StaticResource MicroLabel}"/>
+                        <TextBlock Text="HEAL PRIORITY"   Style="{StaticResource MicroLabel}"/>
+                        <TextBlock Text="WEIGHT"          HorizontalAlignment="Right" Style="{StaticResource MicroLabel}"/>
                     </UniformGrid>
 
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="UnitList">
-                            <!-- Example Row 1 -->
-                            <Border Background="#0C121B" CornerRadius="12" Padding="15" Margin="0,0,0,10">
-                                <UniformGrid Columns="4">
-                                    <TextBlock Text="UNIT_HEAVY_01" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
-                                    <TextBlock Text="HEAVY" Opacity="0.6" VerticalAlignment="Center"/>
-                                    <Grid VerticalAlignment="Center" Margin="0,0,20,0">
-                                        <Border Height="6" Background="#11FFFFFF" CornerRadius="3"/>
-                                        <Border Height="6" HorizontalAlignment="Left" Width="60" Background="{StaticResource AccentHotBrush}" CornerRadius="3"/>
-                                    </Grid>
-                                    <TextBlock Text="92.4%" HorizontalAlignment="Right" FontWeight="Bold" Foreground="{StaticResource AccentHotBrush}" VerticalAlignment="Center"/>
-                                </UniformGrid>
-                            </Border>
-                            <!-- Example Row 2 -->
-                            <Border Background="#0C121B" CornerRadius="12" Padding="15" Margin="0,0,0,10">
-                                <UniformGrid Columns="4">
-                                    <TextBlock Text="UNIT_SOLDIER_09" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
-                                    <TextBlock Text="SOLDIER" Opacity="0.6" VerticalAlignment="Center"/>
-                                    <Grid VerticalAlignment="Center" Margin="0,0,20,0">
-                                        <Border Height="6" Background="#11FFFFFF" CornerRadius="3"/>
-                                        <Border Height="6" HorizontalAlignment="Left" Width="180" Background="{StaticResource AccentGreenBrush}" CornerRadius="3"/>
-                                    </Grid>
-                                    <TextBlock Text="45.2%" HorizontalAlignment="Right" FontWeight="Bold" Foreground="{StaticResource AccentGreenBrush}" VerticalAlignment="Center"/>
-                                </UniformGrid>
-                            </Border>
-                            <!-- More rows would be dynamic -->
-                        </StackPanel>
+                    <!-- Empty state -->
+                    <TextBlock x:Name="EmptyLabel" Grid.Row="1"
+                               Text="No priority players configured. Add players in the Priority &amp; Players tab."
+                               Foreground="{StaticResource TextMutedBrush}" FontStyle="Italic"
+                               TextWrapping="Wrap" Margin="10,10,10,0" Visibility="Collapsed"/>
+
+                    <!-- Dynamic player rows -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="PlayerList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#0C121B" CornerRadius="12" Padding="15" Margin="0,0,0,8">
+                                        <UniformGrid Columns="4">
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="White"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                            <Border Background="{Binding TierBackground}" CornerRadius="6"
+                                                    Padding="8,3" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding TierLabel}" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{Binding TierForeground}"/>
+                                            </Border>
+                                            <Grid VerticalAlignment="Center" Margin="0,0,20,0">
+                                                <Border Height="6" Background="#11FFFFFF" CornerRadius="3"/>
+                                                <Border Height="6" HorizontalAlignment="Left"
+                                                        Width="{Binding BarWidth}" CornerRadius="3">
+                                                    <Border.Background>
+                                                        <SolidColorBrush Color="{Binding BarColor}"/>
+                                                    </Border.Background>
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock Text="{Binding WeightLabel}" HorizontalAlignment="Right"
+                                                       FontWeight="Bold" VerticalAlignment="Center">
+                                                <TextBlock.Foreground>
+                                                    <SolidColorBrush Color="{Binding BarColor}"/>
+                                                </TextBlock.Foreground>
+                                            </TextBlock>
+                                        </UniformGrid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </ScrollViewer>
                 </Grid>
             </Border>
 
             <!-- HEURISTICS PANEL -->
             <StackPanel Grid.Column="1">
-                <Border Background="{StaticResource BgCardBrush}" CornerRadius="28" Padding="25" BorderBrush="#15FFFFFF" BorderThickness="1" Margin="0,0,0,20">
+                <Border Background="{StaticResource BgCardBrush}" CornerRadius="28" Padding="25"
+                        BorderBrush="#15FFFFFF" BorderThickness="1" Margin="0,0,0,20">
                     <StackPanel>
                         <TextBlock Text="◈  HEURISTIC WEIGHTS" Style="{StaticResource SectionTitle}" Margin="0,0,0,20"/>
-                        
+
                         <TextBlock Text="POWER CLASS MULTIPLIER" Style="{StaticResource MicroLabel}"/>
                         <DockPanel Margin="0,0,0,15">
-                            <TextBlock Text="2.5x" DockPanel.Dock="Right" FontWeight="Bold" Foreground="{StaticResource AccentCoolBrush}"/>
-                            <Slider Minimum="1.0" Maximum="5.0" Value="2.5"/>
+                            <TextBlock x:Name="PowerWeightLabel" DockPanel.Dock="Right" Width="40"
+                                       TextAlignment="Right" FontWeight="Bold"
+                                       Foreground="{StaticResource AccentCoolBrush}"/>
+                            <Slider x:Name="SldPowerWeight" Minimum="1.0" Maximum="5.0"
+                                    ValueChanged="HeuristicSlider_Changed"/>
                         </DockPanel>
 
                         <TextBlock Text="SUPPORT CLASS MULTIPLIER" Style="{StaticResource MicroLabel}"/>
                         <DockPanel Margin="0,0,0,15">
-                            <TextBlock Text="1.2x" DockPanel.Dock="Right" FontWeight="Bold" Foreground="{StaticResource AccentCoolBrush}"/>
-                            <Slider Minimum="1.0" Maximum="5.0" Value="1.2"/>
+                            <TextBlock x:Name="SupportWeightLabel" DockPanel.Dock="Right" Width="40"
+                                       TextAlignment="Right" FontWeight="Bold"
+                                       Foreground="{StaticResource AccentCoolBrush}"/>
+                            <Slider x:Name="SldSupportWeight" Minimum="1.0" Maximum="5.0"
+                                    ValueChanged="HeuristicSlider_Changed"/>
                         </DockPanel>
 
                         <TextBlock Text="DISTANCE PENALTY" Style="{StaticResource MicroLabel}"/>
-                        <Slider Minimum="0.0" Maximum="1.0" Value="0.4" Margin="0,0,0,15"/>
+                        <DockPanel Margin="0,0,0,15">
+                            <TextBlock x:Name="DistPenaltyLabel" DockPanel.Dock="Right" Width="40"
+                                       TextAlignment="Right" FontWeight="Bold"
+                                       Foreground="{StaticResource AccentAmberBrush}"/>
+                            <Slider x:Name="SldDistPenalty" Minimum="0.0" Maximum="1.0"
+                                    ValueChanged="HeuristicSlider_Changed"/>
+                        </DockPanel>
+
+                        <TextBlock Text="TIER 1 HEAL PRIORITY BOOST (%)" Style="{StaticResource MicroLabel}"/>
+                        <DockPanel Margin="0,0,0,5">
+                            <TextBlock x:Name="Tier1BoostLabel" DockPanel.Dock="Right" Width="40"
+                                       TextAlignment="Right" FontWeight="Bold"
+                                       Foreground="{StaticResource AccentHotBrush}"/>
+                            <Slider x:Name="SldTier1Boost" Minimum="0" Maximum="100"
+                                    ValueChanged="HeuristicSlider_Changed"/>
+                        </DockPanel>
                     </StackPanel>
                 </Border>
 
-                <Button Content="APPLY HEURISTICS" Style="{StaticResource PrimaryBtn}" Height="50" HorizontalAlignment="Stretch"/>
+                <Button Content="APPLY HEURISTICS" Style="{StaticResource PrimaryBtn}"
+                        Height="50" HorizontalAlignment="Stretch" Click="ApplyHeuristics_Click"/>
+
+                <!-- Status -->
+                <TextBlock x:Name="HeuristicsStatus" Text="" FontSize="11" Margin="0,8,0,0"
+                           HorizontalAlignment="Center" Foreground="{StaticResource AccentGreenBrush}"/>
             </StackPanel>
         </Grid>
     </Grid>
