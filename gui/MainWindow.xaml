@@ -16,6 +16,13 @@
         Closing="Window_Closing">
 
     <Window.Resources>
+        <SolidColorBrush x:Key="AccentCoolBrush" Color="#4ED9FF"/>
+        <SolidColorBrush x:Key="AccentHotBrush" Color="#F2586B"/>
+        <SolidColorBrush x:Key="AccentGreenBrush" Color="#2ECC71"/>
+        <SolidColorBrush x:Key="AccentPurpleBrush" Color="#A569BD"/>
+        <SolidColorBrush x:Key="AccentAmberBrush" Color="#F39C12"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#8899AA"/>
+
         <Style x:Key="NavItemStyle" TargetType="RadioButton">
             <Setter Property="Margin" Value="0,0,0,12" />
             <Setter Property="Template">
@@ -43,6 +50,47 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="GhostBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#22FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DangerBtn" TargetType="Button" BasedOn="{StaticResource GhostBtn}">
+            <Setter Property="Foreground" Value="{StaticResource AccentHotBrush}"/>
+        </Style>
+
+        <Style x:Key="MicroLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Storyboard x:Key="FadeInView">
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="20" To="0" Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.3"/>
+        </Storyboard>
     </Window.Resources>
 
     <Border x:Name="MainContainer" Margin="10" CornerRadius="32" Background="#0C121B" BorderBrush="#18FFFFFF" BorderThickness="1" ClipToBounds="True">

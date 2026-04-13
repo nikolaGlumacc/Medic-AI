@@ -40,7 +40,7 @@ def main():
 
     except OSError as exc:
         if getattr(exc, "errno", None) == 10048:
-            print("ERROR: Port already in use (likely 5000 or 8765).")
+            print("ERROR: Port already in use (likely 5000 or 8766).")
             print("Fix: close the other instance or change ports in config.")
             return 1
 

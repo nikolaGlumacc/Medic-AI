@@ -5,7 +5,7 @@ A sophisticated Team Fortress 2 Medic bot automation system with real-time WebSo
 ## Features
 
 ### 🤖 Bot Server
-- **WebSocket Server** - Real-time communication with GUI dashboard on port 8765
+- **WebSocket Server** - Real-time communication with GUI dashboard on port 8766
 - **Automatic Medic Gameplay** - Intelligent following, healing, and Uber management
 - **Computer Vision Integration** - YOLOv8-based environment awareness
 - **Configurable Behavior** - Adjustable follow modes, Uber strategies, weapon loadouts
@@ -61,13 +61,13 @@ A sophisticated Team Fortress 2 Medic bot automation system with real-time WebSo
    ```
 
 Two windows will open:
-- **Bot Server Window** - Shows "Bot WebSocket server running on port 8765"
+- **Bot Server Window** - Shows "Bot WebSocket server running on port 8766"
 - **MedicAI Dashboard** - Professional GUI interface
 
 ## Configuration
 
 Edit `bot/bot_server.py` to modify:
-- Server port (default: 8765)
+- Server port (default: 8766)
 - Follow distance thresholds
 - Spy check frequency
 - Uber behavior modes
@@ -123,7 +123,7 @@ MedicAI/
 
 ```
 1. User runs start.bat
-2. Bot server starts on localhost:8765
+2. Bot server starts on localhost:8766
 3. GUI dashboard launches
 4. GUI connects to WebSocket server
 5. Configuration sent to bot
@@ -179,10 +179,10 @@ MedicAI/
 ### Bot Server Won't Start
 - Ensure Python 3.11+ is installed
 - Verify virtual environment exists: `c:\medicai_venv\`
-- Check port 8765 is not already in use: `netstat -ano | findstr :8765`
+- Check port 8766 is not already in use: `netstat -ano | findstr :8766`
 
 ### GUI Won't Connect
-- Ensure bot server window shows "running on port 8765"
+- Ensure bot server window shows "running on port 8766"
 - Try restarting both applications
 - Check firewall settings
 

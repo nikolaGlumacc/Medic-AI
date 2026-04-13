@@ -12,7 +12,7 @@ Your bot server had **2 critical issues** that have now been resolved:
 **Simply double-click: `start.bat`**
 
 Two windows will open:
-1. **Bot Server Window** - Shows "Bot WebSocket server running on port 8765"
+1. **Bot Server Window** - Shows "Bot WebSocket server running on port 8766"
 2. **MedicAI GUI Dashboard** - The application interface
 
 ## What's Fixed
@@ -55,7 +55,7 @@ All tests passed:
 ## Expected Behavior
 
 When you run start.bat:
-1. Bot server window appears with: `Bot WebSocket server running on port 8765`
+1. Bot server window appears with: `Bot WebSocket server running on port 8766`
 2. GUI dashboard launches after 2 seconds
 3. GUI connects to bot server automatically
 4. No errors, no crashes, no deprecation warnings
@@ -66,6 +66,6 @@ When you run start.bat:
 - ✓ Virtual environment with dependencies
 - ✓ .NET 10 WPF GUI (built)
 - ✓ AsyncIO event loop
-- ✓ WebSocket server running on port 8765
+- ✓ WebSocket server running on port 8766
 
 **You're all set! Run start.bat now.**

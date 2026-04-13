@@ -323,8 +323,8 @@ def test_websocket():
 
         async def _run():
             try:
-                async with websockets.connect("ws://127.0.0.1:8765", open_timeout=3) as ws:
-                    ok("WebSocket connected to ws://127.0.0.1:8765")
+                async with websockets.connect("ws://127.0.0.1:8766", open_timeout=3) as ws:
+                    ok("WebSocket connected to ws://127.0.0.1:8766")
 
                     # Send a config action
                     await ws.send(json.dumps({"action": "config", "config": {"_ws_test": True}}))

@@ -20,43 +20,27 @@ namespace MedicAIGUI
             _service.LoadLocalSettings();
             _settings = _service.Settings;
             _service.ApplyConnectionSettings(_settings);
-            
-            // Apply theme on startup
             ApplyTheme();
-            
-            // Listen for changes
             _settings.PropertyChanged += (s, e) => ApplyTheme();
-
-            // Default view
             NavigateTo(new DashboardView());
-            ApplyUpdateSnapshot(false);
         }
 
         private void ApplyTheme()
         {
             try
             {
-                // 1. Accent Color
-                var accentColor = (Color)ColorConverter.ConvertFromString(_settings.AccentColor);
-                Application.Current.Resources["AccentCool"] = accentColor;
-                Application.Current.Resources["AccentCoolBrush"] = new SolidColorBrush(accentColor);
-
-                // 2. Opacity
+                var accent = (Color)ColorConverter.ConvertFromString(_settings.AccentColor);
+                Application.Current.Resources["AccentCool"] = accent;
+                Application.Current.Resources["AccentCoolBrush"] = new SolidColorBrush(accent);
                 MainContainer.Opacity = _settings.UiOpacity;
-
-                // 3. Font
-                var font = new FontFamily(_settings.GlobalFontFamily);
-                this.FontFamily = font;
+                FontFamily = new FontFamily(_settings.GlobalFontFamily);
             }
             catch { }
         }
 
         private void NavigateTo(object view)
         {
-            if (ViewHost == null) return;
             ViewHost.Content = view;
-            
-            // Premium Entrance Animation
             var sb = (Storyboard)Application.Current.TryFindResource("FadeInView");
             if (sb != null)
             {
@@ -67,9 +51,8 @@ namespace MedicAIGUI
 
         private void NavBtn_Checked(object sender, RoutedEventArgs e)
         {
-            if (ViewHost == null) return;
-            string? viewName = (sender as RadioButton)?.Name;
-            switch (viewName)
+            string? name = (sender as RadioButton)?.Name;
+            switch (name)
             {
                 case "DashboardBtn": NavigateTo(new DashboardView()); break;
                 case "PriorityBtn":  NavigateTo(new PriorityPlayersView()); break;
@@ -79,18 +62,8 @@ namespace MedicAIGUI
             }
         }
 
-        private void ApplyUpdateSnapshot(bool updatesAvailable)
-        {
-            if (UpdateNavBadge != null)
-            {
-                UpdateNavBadge.Visibility = updatesAvailable ? Visibility.Visible : Visibility.Collapsed;
-            }
-        }
-
         private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.ChangedButton == MouseButton.Left) DragMove();
-        }
+        { if (e.ChangedButton == MouseButton.Left) DragMove(); }
 
         private void CloseBtn_Click(object sender, RoutedEventArgs e) => Close();
         private void MinimizeBtn_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

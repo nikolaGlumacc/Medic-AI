@@ -1,335 +1,109 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using MedicAIGUI.Services;
+using Newtonsoft.Json.Linq;
 
 namespace MedicAIGUI.Views
 {
     public partial class DashboardView : UserControl
     {
-        private sealed class ActivityEntry
-        {
-            public DateTime Timestamp { get; init; }
-            public string Type { get; init; } = "Info";
-            public string Message { get; init; } = string.Empty;
-        }
-
         private readonly MedicBotService _service = MedicBotService.Instance;
-        private readonly DateTime _startTime = DateTime.Now;
-        private readonly List<ActivityEntry> _activityEntries = new List<ActivityEntry>();
-        private readonly FlowDocument _logDocument = new FlowDocument();
-        private bool _isInitialized;
-        private bool _subscriptionsAttached;
-        private bool _scrollLocked;
-        private string _activeLogFilter = "ALL";
-        private string _logSearchTerm = string.Empty;
+        private ObservableCollection<string> _weapons = new();
+        private bool _autoScroll = true;
 
         public DashboardView()
         {
             InitializeComponent();
-
-            LogOutput.Document = _logDocument;
-            Loaded += DashboardView_Loaded;
-            Unloaded += DashboardView_Unloaded;
+            WeaponsList.ItemsSource = _weapons;
+            _service.StatusUpdated += OnStatusUpdated;
+            _service.LogReceived += OnLogReceived;
+            _service.ConnectionChanged += OnConnectionChanged;
+            Loaded += async (s, e) => await _service.ConnectAsync();
+            Unloaded += (s, e) => _service.Disconnect();
+            UpdateButtonState(false);
         }
 
-        private void DashboardView_Loaded(object sender, RoutedEventArgs e)
+        private void OnStatusUpdated(JObject status)
         {
-            if (!_subscriptionsAttached)
+            Dispatcher.Invoke(() =>
             {
-                _service.StatusUpdated += OnStatusUpdated;
-                _service.LogReceived += OnLogReceived;
-                _service.ConnectionChanged += OnConnectionChanged;
-                _subscriptionsAttached = true;
-            }
-
-            _isInitialized = true;
-            OnConnectionChanged(_service.IsConnected);
-            OnStatusUpdated(_service.LastTelemetry);
+                HealingStat.Text = $"{status["healing"]?.Value<int>() ?? 0} HP/s";
+                MeleeStat.Text = status["melee_kills"]?.ToString() ?? "0";
+                var secs = status["session_seconds"]?.Value<int>() ?? 0;
+                UptimeStat.Text = $"{secs / 3600:D2}:{(secs % 3600) / 60:D2}:{secs % 60:D2}";
+                PingStat.Text = $"{status["latency"]?.Value<int>() ?? 0} ms";
+                UpdateSparkline(status["uber"]?.Value<double>() ?? 0);
+            });
         }
 
-        private void DashboardView_Unloaded(object sender, RoutedEventArgs e)
+        private void UpdateSparkline(double uber)
         {
-            _isInitialized = false;
+            // Simple sparkline: shift points left, add new point
+            var points = Sparkline.Points;
+            if (points.Count > 50) points.RemoveAt(0);
+            points.Add(new System.Windows.Point(points.Count * 8, 50 - uber / 2));
+        }
 
-            if (!_subscriptionsAttached)
+        private void OnLogReceived(string msg)
+        {
+            Dispatcher.Invoke(() =>
             {
-                return;
-            }
-
-            _service.StatusUpdated -= OnStatusUpdated;
-            _service.LogReceived -= OnLogReceived;
-            _service.ConnectionChanged -= OnConnectionChanged;
-            _subscriptionsAttached = false;
+                LogOutput.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\n");
+                if (_autoScroll) LogOutput.ScrollToEnd();
+            });
         }
 
         private void OnConnectionChanged(bool connected)
         {
-            if (!_isInitialized)
-            {
-                return;
-            }
-
-            Dispatcher.Invoke(() =>
-            {
-                RefreshBtn.IsEnabled = true;
-                SyncConfigBtn.IsEnabled = true;
-                FetchWeaponsBtn.IsEnabled = true;
-                DebugSnapshotBtn.IsEnabled = connected;
-                // Reset deploy state when connection drops
-                if (!connected)
-                {
-                    StartBotBtn.IsEnabled = true;
-                    StopBotBtn.IsEnabled = false;
-                }
-            });
+            Dispatcher.Invoke(() => UpdateButtonState(connected));
         }
 
-        private void OnStatusUpdated(TelemetrySnapshot data)
+        private void UpdateButtonState(bool connected)
         {
-            if (!_isInitialized)
-            {
-                return;
-            }
-
-            Dispatcher.Invoke(() =>
-            {
-                HealingStat.Text = $"{data.HealingOutput} HP/s";
-                MeleeStat.Text = data.MeleeKills.ToString();
-                UptimeStat.Text = DateTime.Now.Subtract(_startTime).ToString(@"hh\:mm\:ss");
-                PingStat.Text = $"{data.Latency:0} ms";
-                UpdateGraphs(data.TargetHPGraph);
-            });
+            StartBotBtn.IsEnabled = connected;
+            StopBotBtn.IsEnabled = connected;
+            RefreshBtn.IsEnabled = connected;
+            SyncConfigBtn.IsEnabled = connected;
+            FetchWeaponsBtn.IsEnabled = connected;
+            DebugSnapshotBtn.IsEnabled = connected;
         }
 
-        private void OnLogReceived(string type, string msg)
-        {
-            if (!_isInitialized)
-            {
-                return;
-            }
-
-            Dispatcher.Invoke(() => AppendActivity(type, msg));
-        }
-
-        private void AppendActivity(string type, string msg)
-        {
-            _activityEntries.Add(new ActivityEntry
-            {
-                Timestamp = DateTime.Now,
-                Type = string.IsNullOrWhiteSpace(type) ? "Info" : type,
-                Message = msg ?? string.Empty
-            });
-
-            while (_activityEntries.Count > 500)
-            {
-                _activityEntries.RemoveAt(0);
-            }
-
-            RefreshActivityLog();
-        }
-
-        private void RefreshActivityLog()
-        {
-            _logDocument.Blocks.Clear();
-
-            foreach (var entry in _activityEntries.Where(MatchesFilter))
-            {
-                var run = new Run($"[{entry.Timestamp:HH:mm:ss}] [{entry.Type.ToUpperInvariant()}] {entry.Message}")
-                {
-                    Foreground = new SolidColorBrush(GetColor(entry.Type))
-                };
-
-                _logDocument.Blocks.Add(new Paragraph(run) { Margin = new Thickness(0, 0, 0, 4) });
-            }
-
-            while (_logDocument.Blocks.Count > 500)
-            {
-                _logDocument.Blocks.Remove(_logDocument.Blocks.FirstBlock);
-            }
-
-            if (!_scrollLocked)
-            {
-                LogOutput.ScrollToEnd();
-            }
-        }
-
-        private bool MatchesFilter(ActivityEntry entry)
-        {
-            var type = entry.Type.ToUpperInvariant();
-            var message = entry.Message ?? string.Empty;
-
-            var matchesFilter = _activeLogFilter switch
-            {
-                "ALL" => true,
-                "OK" => type == "OK",
-                "ERR" => type == "ERROR" || type == "ERR",
-                "WARN" => type == "WARN" || type == "WARNING",
-                "SYNC" => type == "SYNC" || message.IndexOf("sync", StringComparison.OrdinalIgnoreCase) >= 0,
-                _ => true
-            };
-
-            if (!matchesFilter)
-            {
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(_logSearchTerm))
-            {
-                return true;
-            }
-
-            return message.IndexOf(_logSearchTerm, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   type.IndexOf(_logSearchTerm, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static Color GetColor(string type)
-        {
-            return type.ToUpperInvariant() switch
-            {
-                "OK" => (Color)ColorConverter.ConvertFromString("#39D98A"),
-                "ERROR" => (Color)ColorConverter.ConvertFromString("#F2586B"),
-                "ERR" => (Color)ColorConverter.ConvertFromString("#F2586B"),
-                "WARN" => (Color)ColorConverter.ConvertFromString("#FFB830"),
-                "WARNING" => (Color)ColorConverter.ConvertFromString("#FFB830"),
-                "SYNC" => (Color)ColorConverter.ConvertFromString("#8AB4F8"),
-                _ => (Color)ColorConverter.ConvertFromString("#4ED9FF")
-            };
-        }
-
-        private void UpdateGraphs(List<double> hpPoints)
-        {
-            Sparkline.Points.Clear();
-
-            if (hpPoints == null || hpPoints.Count < 2)
-            {
-                return;
-            }
-
-            var width = SparklineCanvas.ActualWidth;
-            var height = SparklineCanvas.ActualHeight;
-
-            if (width <= 0)
-            {
-                width = 600;
-            }
-
-            if (height <= 0)
-            {
-                height = 140;
-            }
-
-            var xStep = width / Math.Max(1, hpPoints.Count - 1);
-            for (var i = 0; i < hpPoints.Count; i++)
-            {
-                var y = height - (hpPoints[i] / 150.0 * height);
-                Sparkline.Points.Add(new Point(i * xStep, y));
-            }
-        }
-
-        private void SetFilter(string filter)
-        {
-            _activeLogFilter = filter;
-            RefreshActivityLog();
-        }
-
-        private async Task RefreshWeaponsAsync()
-        {
-            var weapons = await _service.GetWeaponsAsync();
-            WeaponsList.ItemsSource = weapons;
-        }
-
-        private async void RefreshBtn_Click(object sender, RoutedEventArgs e)
-        {
-            await _service.RefreshStatusAsync();
-        }
-
-        private async void SyncConfigBtn_Click(object sender, RoutedEventArgs e)
-        {
-            await _service.SyncConfigAsync();
-        }
-
+        // Event handlers
+        private async void StartBotBtn_Click(object sender, RoutedEventArgs e) => await _service.StartBotAsync();
+        private async void StopBotBtn_Click(object sender, RoutedEventArgs e) => await _service.StopBotAsync();
+        private async void RefreshBtn_Click(object sender, RoutedEventArgs e) => await _service.RefreshStatusAsync();
+        private async void SyncConfigBtn_Click(object sender, RoutedEventArgs e) => await _service.SyncConfigAsync();
         private async void FetchWeaponsBtn_Click(object sender, RoutedEventArgs e)
         {
-            await RefreshWeaponsAsync();
-        }
-
-        private async void DebugSnapshotBtn_Click(object sender, RoutedEventArgs e)
-        {
-            await _service.DebugSnapshotAsync();
-        }
-
-        private async void StartBotBtn_Click(object sender, RoutedEventArgs e)
-        {
-            StartBotBtn.IsEnabled = false;
-            var ok = await _service.StartBotAsync();
-            if (ok)
+            var weapons = await _service.GetWeaponsAsync();
+            Dispatcher.Invoke(() =>
             {
-                StartBotBtn.IsEnabled = false;
-                StopBotBtn.IsEnabled = true;
-                AppendActivity("OK", "Bot deployed and running.");
-            }
-            else
-            {
-                StartBotBtn.IsEnabled = true;
-                AppendActivity("Error", "Failed to start bot — is the server running?");
-            }
+                _weapons.Clear();
+                foreach (var w in weapons) _weapons.Add(w);
+            });
         }
+        private void SimulationBtn_Click(object sender, RoutedEventArgs e) { /* Toggle simulation stub */ }
+        private void DebugSnapshotBtn_Click(object sender, RoutedEventArgs e) => _service.DebugSnapshotAsync();
 
-        private async void StopBotBtn_Click(object sender, RoutedEventArgs e)
-        {
-            StopBotBtn.IsEnabled = false;
-            var ok = await _service.StopBotAsync();
-            if (ok)
-            {
-                StartBotBtn.IsEnabled = true;
-                StopBotBtn.IsEnabled = false;
-                AppendActivity("Warn", "Bot stopped.");
-            }
-            else
-            {
-                StopBotBtn.IsEnabled = true;
-                AppendActivity("Error", "Stop command failed.");
-            }
-        }
-
-        private void SimulationBtn_Click(object sender, RoutedEventArgs e)
-        {
-            _service.SimulationMode = !_service.SimulationMode;
-            AppendActivity("Info", _service.SimulationMode ? "Simulation mode enabled." : "Simulation mode disabled.");
-        }
-
+        // Log toolbar
         private void CopyLogBtn_Click(object sender, RoutedEventArgs e)
         {
-            var text = new TextRange(LogOutput.Document.ContentStart, LogOutput.Document.ContentEnd).Text;
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                Clipboard.SetText(text);
-            }
+            Clipboard.SetText(new TextRange(LogOutput.Document.ContentStart, LogOutput.Document.ContentEnd).Text);
         }
-
         private void ScrollLockBtn_Click(object sender, RoutedEventArgs e)
         {
-            _scrollLocked = !_scrollLocked;
-            ScrollLockBtn.Content = _scrollLocked ? "Unlock Scroll" : "Lock Scroll";
-            ScrollStateText.Text = _scrollLocked ? "Scroll locked" : "Auto-scroll";
+            _autoScroll = !_autoScroll;
+            ScrollStateText.Text = _autoScroll ? "Auto-scroll" : "Scroll locked";
         }
-
-        private void FilterAllBtn_Click(object sender, RoutedEventArgs e) => SetFilter("ALL");
-        private void FilterOkBtn_Click(object sender, RoutedEventArgs e) => SetFilter("OK");
-        private void FilterErrBtn_Click(object sender, RoutedEventArgs e) => SetFilter("ERR");
-        private void FilterSyncBtn_Click(object sender, RoutedEventArgs e) => SetFilter("SYNC");
-        private void FilterWarnBtn_Click(object sender, RoutedEventArgs e) => SetFilter("WARN");
-
-        private void ActivitySearchBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            _logSearchTerm = ActivitySearchBox.Text?.Trim() ?? string.Empty;
-            RefreshActivityLog();
-        }
+        private void FilterAllBtn_Click(object sender, RoutedEventArgs e) { }
+        private void FilterOkBtn_Click(object sender, RoutedEventArgs e) { }
+        private void FilterErrBtn_Click(object sender, RoutedEventArgs e) { }
+        private void FilterSyncBtn_Click(object sender, RoutedEventArgs e) { }
+        private void FilterWarnBtn_Click(object sender, RoutedEventArgs e) { }
+        private void ActivitySearchBox_TextChanged(object sender, TextChangedEventArgs e) { }
     }
 }

@@ -8,6 +8,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
+        <!-- Header -->
         <Grid Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -20,6 +21,7 @@
                 </Border>
             </StackPanel>
             <WrapPanel Grid.Column="1">
+                <Button Content="Save to Bot" Width="120" Height="38" Margin="0,0,10,0" Click="SaveToBot_Click" Background="#4ED9FF" Foreground="#0C121B" FontWeight="Bold"/>
                 <Button Content="Sync All Settings" Width="150" Height="38" Margin="0,0,10,0" Click="SyncAll_Click"/>
                 <Button x:Name="SaveProfileBtn" Content="Save Profile" Width="120" Height="38" Margin="0,0,10,0" Click="SaveProfileBtn_Click"/>
                 <Button x:Name="LoadProfileBtn" Content="Load Profile" Width="120" Height="38" Click="LoadProfileBtn_Click"/>
@@ -28,6 +30,7 @@
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
+                <!-- Connection -->
                 <Border Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,0,16">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -48,74 +51,135 @@
                 </Border>
 
                 <TabControl Background="Transparent" BorderThickness="0">
+                    <!-- AIM & MOUSE (Expanded) -->
                     <TabItem Header="Aim &amp; Mouse">
                         <ScrollViewer>
                             <StackPanel Margin="20">
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Mouse speed"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MouseSpeedSlider, StringFormat={}{0:F2}}"/>
-                                </Grid>
-                                <Slider x:Name="MouseSpeedSlider" Minimum="0.1" Maximum="2.0" Value="{Binding MouseSpeed, Mode=TwoWay}"/>
+                                <Expander Header="🎯 Basic Aiming" IsExpanded="True" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
+                                    <StackPanel Margin="10">
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Mouse speed"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MouseSpeedSlider, StringFormat={}{0:F2}}"/>
+                                        </Grid>
+                                        <Slider x:Name="MouseSpeedSlider" Minimum="0.1" Maximum="2.0" Value="{Binding MouseSpeed, Mode=TwoWay}"/>
 
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Smoothing"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=SmoothingSlider, StringFormat={}{0:F2}}"/>
-                                </Grid>
-                                <Slider x:Name="SmoothingSlider" Minimum="0.01" Maximum="0.5" Value="{Binding Smoothing, Mode=TwoWay}"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Deadzone (px)"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=DeadzoneSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="DeadzoneSlider" Minimum="0" Maximum="30" Value="{Binding DeadzonePx, Mode=TwoWay}"/>
 
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Deadzone"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=DeadzoneSlider, StringFormat={}{0:0}}"/>
-                                </Grid>
-                                <Slider x:Name="DeadzoneSlider" Minimum="0" Maximum="100" Value="{Binding Deadzone, Mode=TwoWay}"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Max move px"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxMoveSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="MaxMoveSlider" Minimum="1" Maximum="50" Value="{Binding MaxMovePx, Mode=TwoWay}"/>
 
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Max move px"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxMoveSlider, StringFormat={}{0:0}}"/>
-                                </Grid>
-                                <Slider x:Name="MaxMoveSlider" Minimum="1" Maximum="50" Value="{Binding MaxMovePx, Mode=TwoWay}"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Max target distance"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxDistSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="MaxDistSlider" Minimum="100" Maximum="800" Value="{Binding MaxDist, Mode=TwoWay}"/>
+
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Aim lead factor"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=LeadFactorSlider, StringFormat={}{0:F2}}"/>
+                                        </Grid>
+                                        <Slider x:Name="LeadFactorSlider" Minimum="0.0" Maximum="0.5" Value="{Binding AimLeadFactor, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                </Expander>
+
+                                <Expander Header="📈 PID Gains" IsExpanded="False" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
+                                    <StackPanel Margin="10">
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Kp (Proportional)"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=KpSlider, StringFormat={}{0:F2}}"/>
+                                        </Grid>
+                                        <Slider x:Name="KpSlider" Minimum="0.0" Maximum="0.5" Value="{Binding PidKp, Mode=TwoWay}"/>
+
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Ki (Integral)"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=KiSlider, StringFormat={}{0:F3}}"/>
+                                        </Grid>
+                                        <Slider x:Name="KiSlider" Minimum="0.0" Maximum="0.1" Value="{Binding PidKi, Mode=TwoWay}"/>
+
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Kd (Derivative)"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=KdSlider, StringFormat={}{0:F2}}"/>
+                                        </Grid>
+                                        <Slider x:Name="KdSlider" Minimum="0.0" Maximum="0.2" Value="{Binding PidKd, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                </Expander>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
 
-                    <TabItem Header="Tracking">
+                    <!-- TRACKING & LOCK -->
+                    <TabItem Header="Tracking &amp; Lock">
                         <ScrollViewer>
                             <StackPanel Margin="20">
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Match distance"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MatchDistSlider, StringFormat={}{0:0}}"/>
-                                </Grid>
-                                <Slider x:Name="MatchDistSlider" Minimum="0" Maximum="500" Value="{Binding MatchDist, Mode=TwoWay}"/>
+                                <Expander Header="🔒 Lock Behavior" IsExpanded="True" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
+                                    <StackPanel Margin="10">
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Min hits to confirm"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MinHitsSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="MinHitsSlider" Minimum="1" Maximum="10" Value="{Binding TrackMinHits, Mode=TwoWay}" IsSnapToTickEnabled="True"/>
 
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Grace period"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=GracePeriodSlider, StringFormat={}{0:F2}}"/>
-                                </Grid>
-                                <Slider x:Name="GracePeriodSlider" Minimum="0" Maximum="5" Value="{Binding GracePeriod, Mode=TwoWay}"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Max lost frames"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxLostSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="MaxLostSlider" Minimum="2" Maximum="15" Value="{Binding TrackMaxLost, Mode=TwoWay}" IsSnapToTickEnabled="True"/>
 
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Lock grace"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=LockGraceSlider, StringFormat={}{0:F2}}"/>
-                                </Grid>
-                                <Slider x:Name="LockGraceSlider" Minimum="0" Maximum="5" Value="{Binding LockGrace, Mode=TwoWay}"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Lock duration (sec)"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=LockDurSlider, StringFormat={}{0:F1}}"/>
+                                        </Grid>
+                                        <Slider x:Name="LockDurSlider" Minimum="0.5" Maximum="5.0" Value="{Binding LockDuration, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                </Expander>
 
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Max tracked players"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=TrackedPlayersSlider, StringFormat={}{0:0}}"/>
-                                </Grid>
-                                <Slider x:Name="TrackedPlayersSlider" Minimum="1" Maximum="16" Value="{Binding MaxTrackedPlayers, Mode=TwoWay}"/>
+                                <Expander Header="🚶 Follow Movement" IsExpanded="False" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
+                                    <StackPanel Margin="10">
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Forward threshold"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=FwdThreshSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="FwdThreshSlider" Minimum="50" Maximum="400" Value="{Binding FollowFwdThresh, Mode=TwoWay}"/>
+
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Backward threshold"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=BackThreshSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="BackThreshSlider" Minimum="20" Maximum="200" Value="{Binding FollowBackThresh, Mode=TwoWay}"/>
+
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Strafe threshold"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=StrafeThreshSlider, StringFormat={}{0:0}}"/>
+                                        </Grid>
+                                        <Slider x:Name="StrafeThreshSlider" Minimum="30" Maximum="300" Value="{Binding FollowStrafeThresh, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                </Expander>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
 
+                    <!-- BEHAVIOR -->
                     <TabItem Header="Behavior">
                         <ScrollViewer>
                             <StackPanel Margin="20">
@@ -136,6 +200,54 @@
                                 <CheckBox Content="Auto Uber" IsChecked="{Binding AutoUber, Mode=TwoWay}" Margin="0,10,0,0"/>
                                 <CheckBox Content="Prefer melee on retreat" IsChecked="{Binding PreferMeleeForRetreat, Mode=TwoWay}" Margin="0,10,0,0"/>
                                 <CheckBox Content="Follow enabled" IsChecked="{Binding FollowEnabled, Mode=TwoWay}" Margin="0,10,0,0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- HSV COLORS -->
+                    <TabItem Header="HSV Colors">
+                        <ScrollViewer>
+                            <StackPanel Margin="20">
+                                <Expander Header="🔵 BLU Team" IsExpanded="True" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
+                                    <StackPanel Margin="10">
+                                        <TextBlock Text="Hue Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
+                                            <TextBox x:Name="BluHMinBox" Text="{Binding BluHMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
+                                            <TextBlock Text="–" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="BluHMaxBox" Text="{Binding BluHMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="Saturation Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
+                                            <TextBox x:Name="BluSMinBox" Text="{Binding BluSMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
+                                            <TextBlock Text="–" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="BluSMaxBox" Text="{Binding BluSMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="Value Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
+                                            <TextBox x:Name="BluVMinBox" Text="{Binding BluVMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
+                                            <TextBlock Text="–" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="BluVMaxBox" Text="{Binding BluVMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Expander>
+
+                                <Expander Header="🔴 RED Team" IsExpanded="False" Foreground="#F2586B" FontWeight="Bold" Margin="0,0,0,10">
+                                    <StackPanel Margin="10">
+                                        <TextBlock Text="Hue Low Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
+                                            <TextBox x:Name="Red1HMinBox" Text="{Binding Red1HMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
+                                            <TextBlock Text="–" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="Red1HMaxBox" Text="{Binding Red1HMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="Hue High Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
+                                            <TextBox x:Name="Red2HMinBox" Text="{Binding Red2HMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
+                                            <TextBlock Text="–" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="Red2HMaxBox" Text="{Binding Red2HMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
+                                        </StackPanel>
+                                        <!-- Add Red Saturation/Value if desired (pattern same) -->
+                                    </StackPanel>
+                                </Expander>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>

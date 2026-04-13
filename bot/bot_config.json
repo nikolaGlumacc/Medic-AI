@@ -1,5 +1,5 @@
 {
-    "ws_port": 8765,
+    "ws_port": 8766,
     "flask_port": 5000,
     "mouse_speed": 0.6,
     "smoothing": 0.12,
