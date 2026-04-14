@@ -1,17 +1,42 @@
 FATAL ERROR:
-System.InvalidOperationException: The WebSocket is not connected.
-   at System.Net.WebSockets.ClientWebSocket.get_ConnectedWebSocket()
-   at System.Net.WebSockets.ClientWebSocket.CloseAsync(WebSocketCloseStatus closeStatus, String statusDescription, CancellationToken cancellationToken)
-   at MedicAIGUI.Services.MedicBotService.Disconnect() in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\Services\MedicBotService.cs:line 52
-   at MedicAIGUI.Views.DashboardView.<.ctor>b__3_1(Object s, RoutedEventArgs e) in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\Views\DashboardView.xaml.cs:line 26
+System.Reflection.TargetInvocationException: Exception has been thrown by the target of an invocation.
+ ---> System.NullReferenceException: Object reference not set to an instance of an object.
+   at MedicAIGUI.MainWindow.NavigateTo(Object view) in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml.cs:line 43
+   at MedicAIGUI.MainWindow.NavBtn_Checked(Object sender, RoutedEventArgs e) in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml.cs:line 57
    at System.Windows.EventRoute.InvokeHandlersImpl(Object source, RoutedEventArgs args, Boolean reRaised)
    at System.Windows.UIElement.RaiseEventImpl(DependencyObject sender, RoutedEventArgs args)
-   at System.Windows.BroadcastEventHelper.BroadcastEvent(DependencyObject root, RoutedEvent routedEvent)
-   at System.Windows.BroadcastEventHelper.BroadcastUnloadedEvent(Object root)
-   at System.Windows.Media.MediaContext.FireLoadedPendingCallbacks()
-   at System.Windows.Media.MediaContext.FireInvokeOnRenderCallbacks()
-   at System.Windows.Media.MediaContext.RenderMessageHandlerCore(Object resizedCompositionTarget)
-   at System.Windows.Media.MediaContext.RenderMessageHandler(Object resizedCompositionTarget)
+   at System.Windows.Controls.Primitives.ToggleButton.OnIsCheckedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+   at System.Windows.FrameworkElement.OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+   at System.Windows.DependencyObject.NotifyPropertyChange(DependencyPropertyChangedEventArgs args)
+   at System.Windows.DependencyObject.UpdateEffectiveValue(EntryIndex entryIndex, DependencyProperty dp, PropertyMetadata metadata, EffectiveValueEntry oldEntry, EffectiveValueEntry& newEntry, Boolean coerceWithDeferredReference, Boolean coerceWithCurrentValue, OperationType operationType)
+   at System.Windows.DependencyObject.SetValueCommon(DependencyProperty dp, Object value, PropertyMetadata metadata, Boolean coerceWithDeferredReference, Boolean coerceWithCurrentValue, OperationType operationType, Boolean isInternal)
+   at System.Windows.DependencyObject.SetValue(DependencyProperty dp, Object value)
+   at MS.Internal.Xaml.Runtime.ClrObjectRuntime.SetValue(Object inst, XamlMember property, Object value)
+   at System.Xaml.XamlObjectWriter.Logic_ApplyPropertyValue(ObjectWriterContext ctx, XamlMember prop, Object value, Boolean onParent)
+   at System.Xaml.XamlObjectWriter.Logic_DoAssignmentToParentProperty(ObjectWriterContext ctx)
+   at System.Xaml.XamlObjectWriter.WriteEndMember()
+   at System.Windows.Markup.WpfXamlLoader.TransformNodes(XamlReader xamlReader, XamlObjectWriter xamlWriter, Boolean onlyLoadOneNode, Boolean skipJournaledProperties, Boolean shouldPassLineNumberInfo, IXamlLineInfo xamlLineInfo, IXamlLineInfoConsumer xamlLineInfoConsumer, XamlContextStack`1 stack, IStyleConnector styleConnector)
+   at System.Windows.Markup.WpfXamlLoader.Load(XamlReader xamlReader, IXamlObjectWriterFactory writerFactory, Boolean skipJournaledProperties, Object rootObject, XamlObjectWriterSettings settings, Uri baseUri)
+   at System.Windows.Markup.WpfXamlLoader.LoadBaml(XamlReader xamlReader, Boolean skipJournaledProperties, Object rootObject, XamlAccessLevel accessLevel, Uri baseUri)
+   at System.Windows.Markup.XamlReader.LoadBaml(Stream stream, ParserContext parserContext, Object parent, Boolean closeStream)
+   at System.Windows.Application.LoadComponent(Object component, Uri resourceLocator)
+   at MedicAIGUI.MainWindow.InitializeComponent() in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml:line 1
+   at MedicAIGUI.MainWindow..ctor() in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml.cs:line 19
+   at System.RuntimeType.CreateInstanceDefaultCtor(Boolean publicOnly, Boolean wrapExceptions)
+   --- End of inner exception stack trace ---
+   at System.RuntimeType.CreateInstanceDefaultCtor(Boolean publicOnly, Boolean wrapExceptions)
+   at System.RuntimeType.CreateInstanceImpl(BindingFlags bindingAttr, Binder binder, Object[] args, CultureInfo culture)
+   at System.Activator.CreateInstance(Type type, Object[] args)
+   at MS.Internal.Xaml.Runtime.ClrObjectRuntime.CreateInstance(XamlType xamlType, Object[] args)
+   at System.Xaml.XamlObjectWriter.Logic_CreateAndAssignToParentStart(ObjectWriterContext ctx)
+   at System.Xaml.XamlObjectWriter.WriteStartMember(XamlMember property)
+   at System.Windows.Markup.WpfXamlLoader.TransformNodes(XamlReader xamlReader, XamlObjectWriter xamlWriter, Boolean onlyLoadOneNode, Boolean skipJournaledProperties, Boolean shouldPassLineNumberInfo, IXamlLineInfo xamlLineInfo, IXamlLineInfoConsumer xamlLineInfoConsumer, XamlContextStack`1 stack, IStyleConnector styleConnector)
+   at System.Windows.Markup.WpfXamlLoader.Load(XamlReader xamlReader, IXamlObjectWriterFactory writerFactory, Boolean skipJournaledProperties, Object rootObject, XamlObjectWriterSettings settings, Uri baseUri)
+   at System.Windows.Markup.WpfXamlLoader.LoadBaml(XamlReader xamlReader, Boolean skipJournaledProperties, Object rootObject, XamlAccessLevel accessLevel, Uri baseUri)
+   at System.Windows.Markup.XamlReader.LoadBaml(Stream stream, ParserContext parserContext, Object parent, Boolean closeStream)
+   at System.Windows.Application.LoadBamlStreamWithSyncInfo(Stream stream, ParserContext pc)
+   at System.Windows.Application.DoStartup()
+   at System.Windows.Application.<.ctor>b__1_0(Object unused)
    at System.Windows.Threading.ExceptionWrapper.InternalRealCall(Delegate callback, Object args, Int32 numArgs)
    at System.Windows.Threading.ExceptionWrapper.TryCatchWhen(Object source, Delegate callback, Object args, Int32 numArgs, Delegate catchHandler)
    at System.Windows.Threading.DispatcherOperation.InvokeImpl()

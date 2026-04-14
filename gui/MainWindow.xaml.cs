@@ -40,6 +40,7 @@ namespace MedicAIGUI
 
         private void NavigateTo(object view)
         {
+            if (ViewHost == null) return;
             ViewHost.Content = view;
             var sb = (Storyboard)Application.Current.TryFindResource("FadeInView");
             if (sb != null)

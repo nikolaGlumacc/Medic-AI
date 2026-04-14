@@ -21,7 +21,6 @@ namespace MedicAIGUI.Services
 
         public SavedSettings Settings { get; private set; } = new SavedSettings();
 
-        // Events used by views
         public event Action<JObject>? StatusUpdated;
         public event Action<bool>? ConnectionChanged;
         public event Action<string>? OnActivity;
@@ -41,39 +40,55 @@ namespace MedicAIGUI.Services
 
         public async Task ConnectAsync()
         {
-            _ws = new ClientWebSocket();
-            await _ws.ConnectAsync(new Uri(_wsUrl), CancellationToken.None);
-            ConnectionChanged?.Invoke(true);
-            _ = Task.Run(ReceiveLoop);
+            try
+            {
+                _ws = new ClientWebSocket();
+                await _ws.ConnectAsync(new Uri(_wsUrl), CancellationToken.None);
+                ConnectionChanged?.Invoke(true);
+                _ = Task.Run(ReceiveLoop);
+            }
+            catch
+            {
+                ConnectionChanged?.Invoke(false);
+            }
         }
 
         public void Disconnect()
         {
-            _ws?.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by user", CancellationToken.None);
+            try
+            {
+                if (_ws?.State == WebSocketState.Open || _ws?.State == WebSocketState.CloseReceived)
+                    _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by user", CancellationToken.None);
+            }
+            catch { }
             ConnectionChanged?.Invoke(false);
         }
 
         private async Task ReceiveLoop()
         {
             var buffer = new byte[4096];
-            while (_ws?.State == WebSocketState.Open)
+            try
             {
-                var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                var message = JObject.Parse(json);
-                var type = message["type"]?.ToString();
-                if (type == "status")
+                while (_ws?.State == WebSocketState.Open)
                 {
-                    LastTelemetry = message;
-                    StatusUpdated?.Invoke(message);
-                }
-                else if (type == "activity")
-                {
-                    var msg = message["msg"]?.ToString() ?? "";
-                    OnActivity?.Invoke(msg);
-                    LogReceived?.Invoke(msg);
+                    var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    var message = JObject.Parse(json);
+                    var type = message["type"]?.ToString();
+                    if (type == "status")
+                    {
+                        LastTelemetry = message;
+                        StatusUpdated?.Invoke(message);
+                    }
+                    else if (type == "activity")
+                    {
+                        var msg = message["msg"]?.ToString() ?? "";
+                        OnActivity?.Invoke(msg);
+                        LogReceived?.Invoke(msg);
+                    }
                 }
             }
+            catch { }
         }
 
         public async Task SendCommand(string command)
@@ -136,11 +151,15 @@ namespace MedicAIGUI.Services
 
         private async Task SendAsync(string message)
         {
-            if (_ws?.State == WebSocketState.Open)
+            try
             {
-                var bytes = Encoding.UTF8.GetBytes(message);
-                await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+                if (_ws?.State == WebSocketState.Open)
+                {
+                    var bytes = Encoding.UTF8.GetBytes(message);
+                    await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+                }
             }
+            catch { }
         }
     }
 }
