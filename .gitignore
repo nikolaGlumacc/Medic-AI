@@ -68,3 +68,4 @@ Thumbs.db
 
 # Vision engine and watchdog test files
 .pytest_cache/
+.aider*
