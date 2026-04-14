@@ -26,7 +26,7 @@ BOT_DIR = MEDICAI_ROOT / 'bot'
 GUI_DIR = MEDICAI_ROOT / 'gui'
 GUI_EXE = GUI_DIR / 'bin' / 'Debug' / 'net10.0-windows' / 'MedicAIGUI.exe'
 VENV_PYTHON = r'c:\medicai_venv\Scripts\python.exe'
-BOT_SERVER_PORT = 8765
+BOT_SERVER_PORT = 8766
 
 # Add bot directory to path
 sys.path.insert(0, str(BOT_DIR))
@@ -184,7 +184,7 @@ def test_vision_engine():
 # TEST 4: Bot Server Startup
 # ============================================================================
 async def test_bot_server_startup():
-    """Test that bot server can start and listen on port 8765"""
+    """Test that bot server can start and listen on port 8766"""
     print_header("TEST 4: Bot Server Startup & WebSocket Listening")
 
     try:
@@ -204,7 +204,7 @@ async def test_bot_server_startup():
         try:
             await asyncio.wait_for(server_task, timeout=3.0)
         except asyncio.TimeoutError:
-            print_success("Server running on port 8765 (timeout after 3s is expected)")
+            print_success("Server running on port 8766 (timeout after 3s is expected)")
             server_task.cancel()
             try:
                 await server_task

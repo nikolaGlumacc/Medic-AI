@@ -6,7 +6,7 @@ import websockets
 
 async def test_connection():
     try:
-        uri = "ws://127.0.0.1:8765"
+        uri = "ws://127.0.0.1:8766"
         async with websockets.connect(uri) as websocket:
             print("[OK] Connected to bot server successfully!")
 

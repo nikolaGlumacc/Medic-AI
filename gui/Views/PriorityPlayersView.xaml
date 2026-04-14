@@ -1,12 +1,235 @@
 <UserControl x:Class="MedicAIGUI.Views.PriorityPlayersView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             mc:Ignorable="d" 
-             d:DesignHeight="700" d:DesignWidth="1000"
              Foreground="White">
-    <Grid>
-        <TextBlock Text="Priority &amp; Players List" FontSize="24" FontWeight="Bold"/>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="340"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- HEADER -->
+        <Grid Grid.ColumnSpan="2" Margin="0,0,0,20">
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="PRIORITY &amp; PLAYERS" FontSize="22" FontWeight="Bold"/>
+                <TextBlock Text="Manage heal priority tiers, whitelist trusted players, and blacklist threats." 
+                           Style="{StaticResource MicroLabel}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <WrapPanel HorizontalAlignment="Right">
+                <Button Content="Sync to Bot" Width="130" Height="38" Margin="0,0,10,0"
+                        Style="{StaticResource SuccessBtn}" Click="SyncBtn_Click"/>
+                <Button Content="Clear All" Width="100" Height="38"
+                        Style="{StaticResource DangerBtn}" Click="ClearAllBtn_Click"/>
+            </WrapPanel>
+        </Grid>
+
+        <!-- PRIORITY LIST -->
+        <Border Grid.Row="1" Grid.Column="0" Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,16,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="PRIORITY HEAL LIST" FontWeight="Bold" FontSize="16" Margin="0,0,0,14"/>
+
+                <!-- Column headers -->
+                <Border Grid.Row="1" Background="#0C121B" CornerRadius="8" Padding="12,8" Margin="0,0,0,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="PLAYER NAME" Style="{StaticResource MicroLabel}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="TIER" Style="{StaticResource MicroLabel}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="DEATHS" Style="{StaticResource MicroLabel}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="3" Style="{StaticResource MicroLabel}" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <ListBox x:Name="PriorityList"
+                         Grid.Row="2"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         SelectionChanged="PriorityList_SelectionChanged">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,0,6"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#1A4ED9FF"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#0D4ED9FF"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#0C121B" CornerRadius="10" Padding="12,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="80"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding StatusIcon}" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{StaticResource AccentHotBrush}"/>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Border Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            CornerRadius="12" Padding="10,3">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#39D98A22"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Tier}" Value="2">
+                                                        <Setter Property="Background" Value="#FFB83022"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Tier}" Value="3">
+                                                        <Setter Property="Background" Value="#F2586B22"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock VerticalAlignment="Center" FontSize="12" FontWeight="Bold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="TIER 1"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Tier}" Value="2">
+                                                            <Setter Property="Text" Value="TIER 2"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Tier}" Value="3">
+                                                            <Setter Property="Text" Value="TIER 3"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource AccentHotBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
+                                    <TextBlock Grid.Column="2" Text="{Binding Deaths}" HorizontalAlignment="Center" 
+                                               VerticalAlignment="Center" Opacity="0.7"/>
+                                    <Button Grid.Column="3" Content="Remove" Height="28" FontSize="11"
+                                            HorizontalAlignment="Right"
+                                            Background="#F2586B22" Foreground="{StaticResource AccentHotBrush}"
+                                            BorderThickness="0" Padding="8,0"
+                                            Tag="{Binding Name}"
+                                            Click="RemovePriorityBtn_Click"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <!-- RIGHT PANEL: Add Player + Whitelist/Blacklist -->
+        <StackPanel Grid.Row="1" Grid.Column="1">
+
+            <!-- Add Player Card -->
+            <Border Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="ADD PLAYER" FontWeight="Bold" FontSize="16" Margin="0,0,0,14"/>
+
+                    <TextBlock Text="PLAYER NAME" Style="{StaticResource MicroLabel}"/>
+                    <TextBox x:Name="NewPlayerNameBox" Margin="0,4,0,12"
+                             KeyDown="NewPlayerNameBox_KeyDown"/>
+
+                    <TextBlock Text="TIER" Style="{StaticResource MicroLabel}"/>
+                    <ComboBox x:Name="TierSelector" Margin="0,4,0,14" SelectedIndex="0">
+                        <ComboBoxItem Content="Tier 1 — Pocket Priority"/>
+                        <ComboBoxItem Content="Tier 2 — Secondary Support"/>
+                        <ComboBoxItem Content="Tier 3 — Low Priority"/>
+                    </ComboBox>
+
+                    <Button Content="+ Add to Priority List" Height="40"
+                            Style="{StaticResource PrimaryBtn}"
+                            Click="AddPriorityBtn_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Whitelist -->
+            <Border Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="120"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="WHITELIST" FontWeight="Bold" FontSize="15" Margin="0,0,0,10"
+                               Foreground="{StaticResource AccentGreenBrush}"/>
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="WhitelistInput" KeyDown="WhitelistInput_KeyDown"/>
+                        <Button Grid.Column="1" Content="+" Width="36" Height="36" Margin="6,0,0,0"
+                                Background="{StaticResource AccentGreenBrush}" Foreground="#05080E" FontWeight="Bold"
+                                BorderThickness="0" Click="AddWhitelistBtn_Click"/>
+                    </Grid>
+                    <ListBox x:Name="WhitelistBox" Grid.Row="2"
+                             Background="#0C121B" BorderThickness="0" Foreground="LightGray"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             MouseDoubleClick="WhitelistBox_DoubleClick">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontSize="13" Padding="4,2"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- Blacklist -->
+            <Border Background="#101826" CornerRadius="18" Padding="20">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="120"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="BLACKLIST" FontWeight="Bold" FontSize="15" Margin="0,0,0,10"
+                               Foreground="{StaticResource AccentHotBrush}"/>
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="BlacklistInput" KeyDown="BlacklistInput_KeyDown"/>
+                        <Button Grid.Column="1" Content="+" Width="36" Height="36" Margin="6,0,0,0"
+                                Background="{StaticResource AccentHotBrush}" Foreground="White" FontWeight="Bold"
+                                BorderThickness="0" Click="AddBlacklistBtn_Click"/>
+                    </Grid>
+                    <ListBox x:Name="BlacklistBox" Grid.Row="2"
+                             Background="#0C121B" BorderThickness="0" Foreground="LightGray"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             MouseDoubleClick="BlacklistBox_DoubleClick">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontSize="13" Padding="4,2"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </StackPanel>
     </Grid>
 </UserControl>

@@ -1,8 +1,8 @@
 FATAL ERROR:
 System.Reflection.TargetInvocationException: Exception has been thrown by the target of an invocation.
  ---> System.NullReferenceException: Object reference not set to an instance of an object.
-   at MedicAIGUI.MainWindow.NavigateTo(Object view) in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml.cs:line 54
-   at MedicAIGUI.MainWindow.NavBtn_Checked(Object sender, RoutedEventArgs e) in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml.cs:line 70
+   at MedicAIGUI.MainWindow.NavigateTo(Object view) in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml.cs:line 43
+   at MedicAIGUI.MainWindow.NavBtn_Checked(Object sender, RoutedEventArgs e) in C:\Users\nikol\OneDrive\Desktop\MedicAI\gui\MainWindow.xaml.cs:line 57
    at System.Windows.EventRoute.InvokeHandlersImpl(Object source, RoutedEventArgs args, Boolean reRaised)
    at System.Windows.UIElement.RaiseEventImpl(DependencyObject sender, RoutedEventArgs args)
    at System.Windows.Controls.Primitives.ToggleButton.OnIsCheckedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

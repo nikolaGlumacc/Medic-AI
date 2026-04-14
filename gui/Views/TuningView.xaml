@@ -1,36 +1,34 @@
 <UserControl x:Class="MedicAIGUI.Views.TuningView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d"
-             d:DesignHeight="800" d:DesignWidth="1000">
+             Foreground="White">
 
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
             <StackPanel Margin="10,0,10,20">
-                
-                <!-- ── HEADER ────────────────────────────────────────────────── -->
+
+                <!-- HEADER -->
                 <Grid Margin="0,0,0,30">
                     <StackPanel>
-                        <TextBlock Text="NEURAL ENGINE TUNING" FontSize="22" FontWeight="Bold" Foreground="White" Margin="0,0,5,0"/>
-                        <TextBlock Text="Fine-tune the behavioral decision-making matrix and sync profiles." Style="{StaticResource MicroLabel}"/>
+                        <TextBlock Text="NEURAL ENGINE TUNING" FontSize="22" FontWeight="Bold" Foreground="White"/>
+                        <TextBlock Text="Fine-tune behavioral decision-making and sync to bot." Style="{StaticResource MicroLabel}"/>
                     </StackPanel>
-                    <Button Content="SYNC TUNING NODE" Click="Sync_Click" Style="{StaticResource SuccessBtn}" Height="42" HorizontalAlignment="Right" Width="200"/>
+                    <Button Content="SYNC TUNING NODE" Click="Sync_Click" Style="{StaticResource SuccessBtn}"
+                            Height="42" HorizontalAlignment="Right" Width="200"/>
                 </Grid>
 
-                <!-- ── BEHAVIORAL PRESETS ────────────────────────────────────── -->
-                <Border Background="{StaticResource BgCardBrush}" CornerRadius="24" Padding="30" Margin="0,0,0,20" BorderBrush="#15FFFFFF" BorderThickness="1">
+                <!-- BEHAVIORAL PRESETS -->
+                <Border Background="{StaticResource BgCardBrush}" CornerRadius="24" Padding="30" Margin="0,0,0,20"
+                        BorderBrush="#15FFFFFF" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="300"/>
                         </Grid.ColumnDefinitions>
-                        
+
                         <StackPanel Margin="0,0,30,0">
                             <TextBlock Text="◈  TACTICAL BEHAVIOR PROFILES" Style="{StaticResource SectionTitle}"/>
-                            <TextBlock Text="Select a pre-configured neural model for immediate deployment." Style="{StaticResource MicroLabel}" Margin="0,0,0,20"/>
-                            
+                            <TextBlock Text="Select a pre-configured profile for immediate deployment." Style="{StaticResource MicroLabel}" Margin="0,0,0,20"/>
                             <ComboBox x:Name="ProfileSelector" Height="45" SelectionChanged="ProfileSelector_SelectionChanged">
                                 <ComboBoxItem Content="Balanced (Operational Baseline)"/>
                                 <ComboBoxItem Content="Aggressive (Frontline Pocket)"/>
@@ -39,55 +37,101 @@
                             </ComboBox>
                         </StackPanel>
 
-                        <Border Grid.Column="1" Background="#0C121B" CornerRadius="18" Padding="20" BorderBrush="#11FFFFFF" BorderThickness="1">
+                        <Border Grid.Column="1" Background="#0C121B" CornerRadius="18" Padding="20"
+                                BorderBrush="#11FFFFFF" BorderThickness="1">
                             <StackPanel>
                                 <TextBlock Text="ACTIVE TOGGLES" Style="{StaticResource MicroLabel}" Margin="0,0,0,12"/>
-                                <CheckBox x:Name="CbMirrorMovement" Content="MIRROR STRAFING" IsChecked="True"/>
-                                <CheckBox x:Name="CbJumpSync" Content="JUMP SYNCHRONIZATION" IsChecked="True"/>
-                                <CheckBox x:Name="CbCrouchSync" Content="CROUCH SYNCHRONIZATION" IsChecked="False"/>
-                                <CheckBox x:Name="CbSpyWatch" Content="SMART SPY DEFENSE" IsChecked="True"/>
+                                <CheckBox x:Name="CbMirrorMovement" Content="MIRROR STRAFING"
+                                          IsChecked="{Binding StrafeRandomize, Mode=TwoWay}"/>
+                                <CheckBox x:Name="CbFollowEnabled" Content="FOLLOW ENABLED"
+                                          IsChecked="{Binding FollowEnabled, Mode=TwoWay}"/>
+                                <CheckBox x:Name="CbAutoUber" Content="AUTO UBER"
+                                          IsChecked="{Binding AutoUber, Mode=TwoWay}"/>
+                                <CheckBox x:Name="CbSpyWatch" Content="SMART SPY DEFENSE"
+                                          Checked="CbSpyWatch_Changed" Unchecked="CbSpyWatch_Changed"/>
                             </StackPanel>
                         </Border>
                     </Grid>
                 </Border>
 
-                <!-- ── THRESHOLD GRID ────────────────────────────────────────── -->
+                <!-- THRESHOLD GRID -->
                 <UniformGrid Columns="2">
                     <!-- LEFT: RESPONSE VALUES -->
-                    <Border Background="{StaticResource BgCardBrush}" CornerRadius="24" Padding="25" Margin="0,0,10,0" BorderBrush="#15FFFFFF" BorderThickness="1">
+                    <Border Background="{StaticResource BgCardBrush}" CornerRadius="24" Padding="25"
+                            Margin="0,0,10,0" BorderBrush="#15FFFFFF" BorderThickness="1">
                         <StackPanel>
                             <TextBlock Text="⚡  RESPONSE THRESHOLDS" Style="{StaticResource SectionTitle}" Margin="0,0,0,20"/>
 
                             <TextBlock Text="RETREAT HP THRESHOLD" Style="{StaticResource MicroLabel}"/>
                             <DockPanel Margin="0,0,0,15">
-                                <TextBlock Text="{Binding ElementName=SldRetreatHP, Path=Value, StringFormat={}{0:0}}" DockPanel.Dock="Right" Width="40" TextAlignment="Right" Foreground="{StaticResource AccentHotBrush}" FontWeight="Bold"/>
-                                <Slider x:Name="SldRetreatHP" Minimum="20" Maximum="149" Value="45"/>
+                                <TextBlock Text="{Binding ElementName=SldRetreatHP, Path=Value, StringFormat={}{0:0}}"
+                                           DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                           Foreground="{StaticResource AccentHotBrush}" FontWeight="Bold"/>
+                                <Slider x:Name="SldRetreatHP" Minimum="20" Maximum="149"
+                                        Value="{Binding RetreatHealthThreshold, Mode=TwoWay}"/>
                             </DockPanel>
 
-                            <TextBlock Text="NEURAL AGGRESSION (0–10)" Style="{StaticResource MicroLabel}"/>
+                            <TextBlock Text="UBER POP THRESHOLD (%)" Style="{StaticResource MicroLabel}"/>
                             <DockPanel Margin="0,0,0,15">
-                                <TextBlock Text="{Binding ElementName=SldAggression, Path=Value, StringFormat={}{0:0}}" DockPanel.Dock="Right" Width="40" TextAlignment="Right" Foreground="{StaticResource AccentCoolBrush}" FontWeight="Bold"/>
-                                <Slider x:Name="SldAggression" Minimum="0" Maximum="10" Value="3"/>
+                                <TextBlock Text="{Binding ElementName=SldUberPop, Path=Value, StringFormat={}{0:0}}"
+                                           DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                           Foreground="{StaticResource AccentPurpleBrush}" FontWeight="Bold"/>
+                                <Slider x:Name="SldUberPop" Minimum="50" Maximum="100"
+                                        Value="{Binding UberPopThreshold, Mode=TwoWay}"/>
                             </DockPanel>
 
-                            <TextBlock Text="SPY DETECTION SENSITIVITY" Style="{StaticResource MicroLabel}"/>
-                            <Slider x:Name="SldSpySens" Minimum="0" Maximum="10" Value="5" Margin="0,0,0,15"/>
+                            <TextBlock Text="SPY CHECK FREQUENCY (SECS)" Style="{StaticResource MicroLabel}"/>
+                            <DockPanel Margin="0,0,0,15">
+                                <TextBlock Text="{Binding ElementName=SldSpyFreq, Path=Value, StringFormat={}{0:0}}"
+                                           DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                           Foreground="{StaticResource AccentCoolBrush}" FontWeight="Bold"/>
+                                <Slider x:Name="SldSpyFreq" Minimum="1" Maximum="60"
+                                        Value="{Binding SpyCheckFrequency, Mode=TwoWay}"/>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- RIGHT: SPACING & RADIUS -->
-                    <Border Background="{StaticResource BgCardBrush}" CornerRadius="24" Padding="25" Margin="10,0,0,0" BorderBrush="#15FFFFFF" BorderThickness="1">
+                    <!-- RIGHT: SPACING & MOTION -->
+                    <Border Background="{StaticResource BgCardBrush}" CornerRadius="24" Padding="25"
+                            Margin="10,0,0,0" BorderBrush="#15FFFFFF" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock Text="📍  MOTION &amp; SPACING" Style="{StaticResource SectionTitle}" Margin="0,0,0,20"/>
+                            <TextBlock Text="🔀  MOTION &amp; SPACING" Style="{StaticResource SectionTitle}" Margin="0,0,0,20"/>
 
-                            <TextBlock Text="TRAILING BUFFER (PX)" Style="{StaticResource MicroLabel}"/>
-                            <Slider x:Name="SldFollowFwd" Minimum="50" Maximum="600" Value="200" Margin="0,0,0,20"/>
+                            <TextBlock Text="FORWARD FOLLOW THRESHOLD (PX)" Style="{StaticResource MicroLabel}"/>
+                            <DockPanel Margin="0,0,0,15">
+                                <TextBlock Text="{Binding ElementName=SldFollowFwd, Path=Value, StringFormat={}{0:0}}"
+                                           DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                           Foreground="{StaticResource AccentGreenBrush}" FontWeight="Bold"/>
+                                <Slider x:Name="SldFollowFwd" Minimum="50" Maximum="600"
+                                        Value="{Binding FollowFwdThresh, Mode=TwoWay}"/>
+                            </DockPanel>
 
-                            <TextBlock Text="POCKET PRIORITY RADIUS" Style="{StaticResource MicroLabel}"/>
-                            <Slider x:Name="SldPocketRadius" Minimum="100" Maximum="1000" Value="350" Margin="0,0,0,20"/>
+                            <TextBlock Text="BACK-OFF THRESHOLD (PX)" Style="{StaticResource MicroLabel}"/>
+                            <DockPanel Margin="0,0,0,15">
+                                <TextBlock Text="{Binding ElementName=SldFollowBack, Path=Value, StringFormat={}{0:0}}"
+                                           DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                           Foreground="{StaticResource AccentAmberBrush}" FontWeight="Bold"/>
+                                <Slider x:Name="SldFollowBack" Minimum="20" Maximum="300"
+                                        Value="{Binding FollowBackThresh, Mode=TwoWay}"/>
+                            </DockPanel>
 
-                            <TextBlock Text="JUMP SYNC TOLERANCE (MS)" Style="{StaticResource MicroLabel}"/>
-                            <TextBox x:Name="TxtJumpTolerance" Text="80" Margin="0,0,0,10"/>
+                            <TextBlock Text="MAX TARGET DISTANCE (PX)" Style="{StaticResource MicroLabel}"/>
+                            <DockPanel Margin="0,0,0,15">
+                                <TextBlock Text="{Binding ElementName=SldMaxDist, Path=Value, StringFormat={}{0:0}}"
+                                           DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                           Foreground="{StaticResource AccentCoolBrush}" FontWeight="Bold"/>
+                                <Slider x:Name="SldMaxDist" Minimum="100" Maximum="1000"
+                                        Value="{Binding MaxDist, Mode=TwoWay}"/>
+                            </DockPanel>
+
+                            <TextBlock Text="IDLE ROTATION SPEED" Style="{StaticResource MicroLabel}"/>
+                            <DockPanel Margin="0,0,0,10">
+                                <TextBlock Text="{Binding ElementName=SldIdleRot, Path=Value, StringFormat={}{0:0}}"
+                                           DockPanel.Dock="Right" Width="40" TextAlignment="Right"
+                                           Foreground="{StaticResource TextMutedBrush}" FontWeight="Bold"/>
+                                <Slider x:Name="SldIdleRot" Minimum="1" Maximum="60"
+                                        Value="{Binding IdleRotationSpeed, Mode=TwoWay}"/>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
                 </UniformGrid>

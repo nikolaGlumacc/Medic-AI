@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
+using System.IO;
+using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Threading;
-using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace MedicAIGUI.Services
 {
@@ -13,235 +15,151 @@ namespace MedicAIGUI.Services
         private static MedicBotService? _instance;
         public static MedicBotService Instance => _instance ??= new MedicBotService();
 
-        private readonly HttpClient _http = new HttpClient();
-        private readonly DispatcherTimer _pollTimer;
-        private string _botBaseUrl = "http://127.0.0.1:5000";
+        private ClientWebSocket? _ws;
+        private readonly string _wsUrl = "ws://localhost:8766";
+        private readonly string _configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "bot", "bot_config.json");
 
-        public event Action<TelemetrySnapshot>? StatusUpdated;
-        public event Action<string, string>? LogReceived;
-        public event Action<bool>? ConnectionChanged;
-
-        public TelemetrySnapshot LastTelemetry { get; private set; } = new TelemetrySnapshot();
-        public bool IsConnected { get; private set; }
-        public bool SimulationMode { get; set; }
         public SavedSettings Settings { get; private set; } = new SavedSettings();
 
-        private MedicBotService()
-        {
-            _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _pollTimer.Tick += async (_, __) => await PollStatusAsync();
-            _pollTimer.Start();
-            LoadLocalSettings();
-        }
+        public event Action<JObject>? StatusUpdated;
+        public event Action<bool>? ConnectionChanged;
+        public event Action<string>? OnActivity;
+        public event Action<string>? LogReceived;
+
+        public bool IsConnected => _ws?.State == WebSocketState.Open;
+        public JObject? LastTelemetry { get; private set; }
+
+        private MedicBotService() { }
 
         public void LoadLocalSettings()
         {
-            Settings = SavedSettings.LoadSettings();
-            ApplyConnectionSettings(Settings);
+            Settings = SavedSettings.Load();
         }
 
-        public void ApplyConnectionSettings(SavedSettings settings)
+        public void ApplyConnectionSettings(SavedSettings settings) { }
+
+        public async Task ConnectAsync()
         {
-            Settings = settings;
-            SetBaseUrl(settings.BuildBaseUrl());
-            _http.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.RequestTimeoutSeconds));
-        }
-
-        public void SetBaseUrl(string url)
-        {
-            _botBaseUrl = url.TrimEnd('/');
-        }
-
-        public async Task<bool> RefreshStatusAsync()
-        {
-            await PollStatusAsync();
-            return IsConnected;
-        }
-
-        private async Task PollStatusAsync()
-        {
-            if (SimulationMode)
-            {
-                var rng = new Random();
-                var dummyData = new TelemetrySnapshot
-                {
-                    IsRunning = true,
-                    HealingOutput = rng.Next(40, 150),
-                    MeleeKills = rng.Next(0, 8),
-                    Latency = rng.Next(10, 40),
-                    TargetHPGraph = new List<double> { 80, 90, 85, 95, 100, 105, 110, 120, 130, 140, 145, 150 }
-                };
-
-                LastTelemetry = dummyData;
-                StatusUpdated?.Invoke(dummyData);
-
-                if (!IsConnected)
-                {
-                    IsConnected = true;
-                    ConnectionChanged?.Invoke(true);
-                    LogReceived?.Invoke("Info", "Simulation mode active.");
-                }
-
-                return;
-            }
-
             try
             {
-                using var response = await _http.GetAsync($"{_botBaseUrl}/status");
-                if (!response.IsSuccessStatusCode)
-                {
-                    MarkOffline();
-                    return;
-                }
-
-                var json = await response.Content.ReadAsStringAsync();
-                var data = JsonConvert.DeserializeObject<TelemetrySnapshot>(json);
-                if (data == null)
-                {
-                    MarkOffline();
-                    return;
-                }
-
-                LastTelemetry = data;
-                StatusUpdated?.Invoke(data);
-
-                if (!IsConnected)
-                {
-                    IsConnected = true;
-                    ConnectionChanged?.Invoke(true);
-                    LogReceived?.Invoke("Info", $"Backend connected at {_botBaseUrl}");
-                }
+                _ws = new ClientWebSocket();
+                await _ws.ConnectAsync(new Uri(_wsUrl), CancellationToken.None);
+                ConnectionChanged?.Invoke(true);
+                _ = Task.Run(ReceiveLoop);
             }
             catch
             {
-                MarkOffline();
+                ConnectionChanged?.Invoke(false);
             }
         }
 
-        private void MarkOffline()
+        public void Disconnect()
         {
-            if (!IsConnected)
+            try
             {
-                return;
+                if (_ws?.State == WebSocketState.Open || _ws?.State == WebSocketState.CloseReceived)
+                    _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by user", CancellationToken.None);
             }
-
-            IsConnected = false;
+            catch { }
             ConnectionChanged?.Invoke(false);
-            LogReceived?.Invoke("Error", "Backend offline.");
         }
 
-        public async Task<bool> SyncConfigAsync(object? config = null)
+        private async Task ReceiveLoop()
         {
-            var targetConfig = config ?? Settings;
-
+            var buffer = new byte[4096];
             try
             {
-                var json = JsonConvert.SerializeObject(targetConfig);
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                using var response = await _http.PostAsync($"{_botBaseUrl}/config", content);
-                var ok = response.IsSuccessStatusCode;
-                LogReceived?.Invoke(ok ? "Info" : "Error", ok ? "Config synced." : $"Config sync failed ({(int)response.StatusCode}).");
-                return ok;
-            }
-            catch (Exception ex)
-            {
-                LogReceived?.Invoke("Error", $"Config sync error: {ex.Message}");
-                return false;
-            }
-        }
-
-        public Task<bool> SyncBrainConfigAsync()
-        {
-            return SyncConfigAsync(Settings);
-        }
-
-        public async Task<List<string>> GetWeaponsAsync()
-        {
-            try
-            {
-                using var response = await _http.GetAsync($"{_botBaseUrl}/weapons");
-                if (!response.IsSuccessStatusCode)
+                while (_ws?.State == WebSocketState.Open)
                 {
-                    return new List<string>();
+                    var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    var message = JObject.Parse(json);
+                    var type = message["type"]?.ToString();
+                    if (type == "status")
+                    {
+                        LastTelemetry = message;
+                        StatusUpdated?.Invoke(message);
+                    }
+                    else if (type == "activity")
+                    {
+                        var msg = message["msg"]?.ToString() ?? "";
+                        OnActivity?.Invoke(msg);
+                        LogReceived?.Invoke(msg);
+                    }
                 }
-
-                var json = await response.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<List<string>>(json) ?? new List<string>();
             }
-            catch (Exception ex)
-            {
-                LogReceived?.Invoke("Error", $"Failed to fetch weapons: {ex.Message}");
-                return new List<string>();
-            }
+            catch { }
         }
 
-        public async Task<bool> EquipWeaponAsync(string weaponName)
+        public async Task SendCommand(string command)
+        {
+            var msg = new { type = command };
+            await SendAsync(JsonSerializer.Serialize(msg));
+        }
+
+        public async Task SendConfigUpdate(Dictionary<string, object> config)
+        {
+            var msg = new { type = "config", config };
+            await SendAsync(JsonSerializer.Serialize(msg));
+        }
+
+        public async Task EquipWeapon(string weaponName)
+        {
+            var msg = new { type = "equip_weapon", weapon = weaponName };
+            await SendAsync(JsonSerializer.Serialize(msg));
+        }
+
+        public async Task<List<string>> GetAvailableWeapons()
+        {
+            return new List<string> { "crusaders_crossbow", "medi_gun", "ubersaw" };
+        }
+
+        public JObject? GetConfigFromFile()
         {
             try
             {
-                var json = JsonConvert.SerializeObject(new { weapon = weaponName });
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                using var response = await _http.PostAsync($"{_botBaseUrl}/equip_weapon", content);
-                var ok = response.IsSuccessStatusCode;
-                LogReceived?.Invoke(ok ? "OK" : "Error", ok ? $"Equip request sent for {weaponName}." : $"Equip failed ({(int)response.StatusCode}).");
-                return ok;
+                var json = File.ReadAllText(_configPath);
+                return JObject.Parse(json);
             }
-            catch (Exception ex)
-            {
-                LogReceived?.Invoke("Error", $"Equip error: {ex.Message}");
-                return false;
-            }
+            catch { return null; }
         }
 
-        public Task<bool> DetectTeamAsync()
+        public async Task<bool> SyncConfigAsync()
         {
-            return SendCommandAsync("detect_team", "Detect team");
-        }
-
-        public Task<bool> DebugSnapshotAsync()
-        {
-            return SendCommandAsync("debug_snapshot", "Debug snapshot");
-        }
-
-        public async Task<bool> SendCommandAsync(string endpoint, string? label = null)
-        {
-            var displayLabel = label ?? endpoint.Replace('_', ' ');
-
-            if (SimulationMode)
-            {
-                await Task.Delay(100);
-                LogReceived?.Invoke("OK", $"[simulation] {displayLabel}");
-                return true;
-            }
-
-            if (!IsConnected)
-            {
-                LogReceived?.Invoke("Warn", $"{displayLabel}: backend offline.");
-                return false;
-            }
-
             try
             {
-                using var response = await _http.PostAsync($"{_botBaseUrl}/{endpoint}", null);
-                if (response.IsSuccessStatusCode)
+                var config = GetConfigFromFile();
+                if (config != null)
                 {
-                    LogReceived?.Invoke("OK", $"{displayLabel} completed.");
-                    return true;
+                    var dict = config.ToObject<Dictionary<string, object>>();
+                    if (dict != null)
+                    {
+                        await SendConfigUpdate(dict);
+                        return true;
+                    }
                 }
+            }
+            catch { }
+            return false;
+        }
 
-                LogReceived?.Invoke("Error", $"{displayLabel} failed ({(int)response.StatusCode}).");
-                return false;
-            }
-            catch (TaskCanceledException)
+        public async Task StartBotAsync() => await SendCommand("start");
+        public async Task StopBotAsync() => await SendCommand("stop");
+        public async Task RefreshStatusAsync() => await SendCommand("status");
+        public async Task DebugSnapshotAsync() => await SendCommand("debug_snapshot");
+        public async Task<List<string>> GetWeaponsAsync() => await GetAvailableWeapons();
+
+        private async Task SendAsync(string message)
+        {
+            try
             {
-                LogReceived?.Invoke("Error", $"{displayLabel} timed out.");
-                return false;
+                if (_ws?.State == WebSocketState.Open)
+                {
+                    var bytes = Encoding.UTF8.GetBytes(message);
+                    await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+                }
             }
-            catch (Exception ex)
-            {
-                LogReceived?.Invoke("Error", $"{displayLabel} error: {ex.Message}");
-                return false;
-            }
+            catch { }
         }
     }
 }

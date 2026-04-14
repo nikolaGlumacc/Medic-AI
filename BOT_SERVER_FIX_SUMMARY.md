@@ -17,7 +17,7 @@ async def handle_ws(self, websocket, path):
 
 async def run_server(self):
     import websockets.server
-    async with websockets.server.serve(self.handle_ws, '0.0.0.0', 8765):
+    async with websockets.server.serve(self.handle_ws, '0.0.0.0', 8766):
         await asyncio.Future()
 ```
 
@@ -27,7 +27,7 @@ async def handle_ws(self, websocket):
     # ... (path parameter removed)
 
 async def run_server(self):
-    async with websockets.serve(self.handle_ws, '0.0.0.0', 8765):
+    async with websockets.serve(self.handle_ws, '0.0.0.0', 8766):
         await asyncio.Future()
 ```
 
@@ -72,7 +72,7 @@ start.bat
 ```
 
 This will:
-1. Start the bot server in a new command window (listening on port 8765)
+1. Start the bot server in a new command window (listening on port 8766)
 2. Wait 2 seconds for the server to initialize
 3. Launch the MedicAI GUI dashboard
 

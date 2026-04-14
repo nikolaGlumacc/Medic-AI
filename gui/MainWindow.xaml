@@ -16,6 +16,13 @@
         Closing="Window_Closing">
 
     <Window.Resources>
+        <SolidColorBrush x:Key="AccentCoolBrush" Color="#4ED9FF"/>
+        <SolidColorBrush x:Key="AccentHotBrush" Color="#F2586B"/>
+        <SolidColorBrush x:Key="AccentGreenBrush" Color="#2ECC71"/>
+        <SolidColorBrush x:Key="AccentPurpleBrush" Color="#A569BD"/>
+        <SolidColorBrush x:Key="AccentAmberBrush" Color="#F39C12"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#8899AA"/>
+
         <Style x:Key="NavItemStyle" TargetType="RadioButton">
             <Setter Property="Margin" Value="0,0,0,12" />
             <Setter Property="Template">
@@ -43,6 +50,47 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="GhostBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#22FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DangerBtn" TargetType="Button" BasedOn="{StaticResource GhostBtn}">
+            <Setter Property="Foreground" Value="{StaticResource AccentHotBrush}"/>
+        </Style>
+
+        <Style x:Key="MicroLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Storyboard x:Key="FadeInView">
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="20" To="0" Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.3"/>
+        </Storyboard>
     </Window.Resources>
 
     <Border x:Name="MainContainer" Margin="10" CornerRadius="32" Background="#0C121B" BorderBrush="#18FFFFFF" BorderThickness="1" ClipToBounds="True">
@@ -89,6 +137,8 @@
                             <RadioButton x:Name="DashboardBtn" Content="DASHBOARD" Style="{StaticResource NavItemStyle}" IsChecked="True" Checked="NavBtn_Checked" />
                             <RadioButton x:Name="PriorityBtn" Content="PRIORITY &amp; PLAYERS" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
                             <RadioButton x:Name="SettingsBtn" Content="SETTINGS" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
+                            <RadioButton x:Name="TuningBtn" Content="NEURAL TUNING" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
+                            <RadioButton x:Name="MatrixBtn" Content="TRIAGE MATRIX" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
                             <Border x:Name="UpdateNavBadge" Background="{StaticResource AccentAmberBrush}" CornerRadius="10" Padding="10,4" Margin="0,4,0,0" HorizontalAlignment="Left" Visibility="Collapsed">
                                 <TextBlock Text="UPDATE AVAILABLE" FontSize="10" FontWeight="Bold" Foreground="#05080E"/>
                             </Border>
@@ -110,10 +160,11 @@
                                 <TextBlock Text="ÜBER CHARGE" Style="{StaticResource MicroLabel}"/>
                                 <Grid Height="6" Margin="0,5,0,10">
                                     <Border Background="#11FFFFFF" CornerRadius="3"/>
-                                    <ProgressBar x:Name="UberBar" Value="0" Background="Transparent" Foreground="{StaticResource AccentPurpleBrush}" BorderThickness="0">
+                                    <ProgressBar x:Name="UberBar" Value="0" Minimum="0" Maximum="100" Background="Transparent" Foreground="{StaticResource AccentPurpleBrush}" BorderThickness="0">
                                         <ProgressBar.Template>
                                             <ControlTemplate TargetType="ProgressBar">
                                                 <Grid>
+                                                    <Border x:Name="PART_Track" Background="#11FFFFFF" CornerRadius="3"/>
                                                     <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="3"/>
                                                 </Grid>
                                             </ControlTemplate>
@@ -127,7 +178,7 @@
                 </Border>
 
                 <!-- HEADER -->
-                <Grid Grid.Column="1" Height="60" Margin="0,15,30,0">
+                <Grid Grid.Column="1" Height="60" Margin="0,15,30,0" MouseDown="TitleBar_MouseDown">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button x:Name="MinimizeBtn" Content="−" Width="40" Height="35" Style="{StaticResource GhostBtn}" Click="MinimizeBtn_Click" Margin="0,0,5,0"/>
                         <Button x:Name="CloseBtn" Content="✕" Width="40" Height="35" Style="{StaticResource DangerBtn}" Click="CloseBtn_Click" />
