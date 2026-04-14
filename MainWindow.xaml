@@ -1,0 +1,27 @@
+<Window x:Class="MedicAIGUI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MedicAI" Height="450" Width="800">
+    <Grid>
+        <TabControl>
+            <TabItem Header="Dashboard">
+                <!-- Dashboard content -->
+            </TabItem>
+            <TabItem Header="Matrix">
+                <!-- Matrix content -->
+            </TabItem>
+            <TabItem Header="Settings">
+                <!-- Settings content -->
+            </TabItem>
+            <TabItem Header="Loadout">
+                <Grid>
+                    <StackPanel Orientation="Vertical">
+                        <TextBlock Text="Primary Weapon Selector" FontSize="16" FontWeight="Bold"/>
+                        <Image Source="path/to/primary_weapon.png" Width="100" Height="100"/>
+                        <!-- Add more weapon selectors here -->
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>
