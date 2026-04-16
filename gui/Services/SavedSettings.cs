@@ -80,6 +80,15 @@ namespace MedicAIGUI.Services
         public int SpyCheckFrequency { get; set; } = 8;
         public List<string> PriorityList { get; set; } = new();
 
+        // TuningView bindings (referenced in TuningView.xaml)
+        public bool StrafeRandomize { get; set; } = false;
+        public int IdleRotationSpeed { get; set; } = 18;
+
+        // Loadout
+        public string PrimaryWeapon { get; set; } = "Crusader's Crossbow";
+        public string SecondaryWeapon { get; set; } = "Medi Gun";
+        public string MeleeWeapon { get; set; } = "Ubersaw";
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -154,6 +163,11 @@ namespace MedicAIGUI.Services
             PowerClassWeight = other.PowerClassWeight;
             SpyCheckFrequency = other.SpyCheckFrequency;
             PriorityList = new List<string>(other.PriorityList);
+            StrafeRandomize = other.StrafeRandomize;
+            IdleRotationSpeed = other.IdleRotationSpeed;
+            PrimaryWeapon = other.PrimaryWeapon;
+            SecondaryWeapon = other.SecondaryWeapon;
+            MeleeWeapon = other.MeleeWeapon;
         }
     }
 }

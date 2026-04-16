@@ -52,6 +52,7 @@ namespace MedicAIGUI
 
         private void NavBtn_Checked(object sender, RoutedEventArgs e)
         {
+            if (ViewHost == null) return;
             string? name = (sender as RadioButton)?.Name;
             switch (name)
             {
@@ -60,6 +61,7 @@ namespace MedicAIGUI
                 case "SettingsBtn":  NavigateTo(new SettingsView()); break;
                 case "TuningBtn":    NavigateTo(new TuningView()); break;
                 case "MatrixBtn":    NavigateTo(new MatrixView()); break;
+                case "LoadoutBtn":   NavigateTo(new LoadoutView()); break;
             }
         }
 

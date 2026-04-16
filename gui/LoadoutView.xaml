@@ -1,0 +1,297 @@
+<UserControl x:Class="MedicAIGUI.Views.LoadoutView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Foreground="White">
+
+    <UserControl.Resources>
+        <!-- Minimal item container: DataTemplate handles all selection visuals -->
+        <Style x:Key="WeaponItemContainerStyle" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ═══ HEADER ═══════════════════════════════════════════════════════ -->
+        <Grid Margin="0,0,0,24">
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="LOADOUT CONFIGURATION" FontSize="22" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Text="Select your Medic weapon loadout. Settings are saved locally and can be pushed to the bot."
+                           FontSize="11" FontWeight="SemiBold" Foreground="#8899AA" Margin="0,4,0,0"/>
+            </StackPanel>
+            <WrapPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="SaveLoadoutBtn"
+                        Content="💾  Save Loadout"
+                        Width="140" Height="40"
+                        Margin="0,0,10,0"
+                        Background="#4ED9FF" Foreground="#05080E" FontWeight="Bold"
+                        BorderThickness="0" Cursor="Hand"
+                        Click="SaveLoadoutBtn_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Root" Background="{TemplateBinding Background}"
+                                    CornerRadius="10" BorderThickness="0">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Opacity" Value="0.85"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                <Button x:Name="PushToBotBtn"
+                        Content="🚀  Push to Bot"
+                        Width="140" Height="40"
+                        Background="#39D98A" Foreground="#05080E" FontWeight="Bold"
+                        BorderThickness="0" Cursor="Hand"
+                        Click="PushToBotBtn_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Root" Background="{TemplateBinding Background}"
+                                    CornerRadius="10" BorderThickness="0">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Opacity" Value="0.85"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </WrapPanel>
+        </Grid>
+
+        <!-- ═══ THREE-COLUMN WEAPON SELECTOR ════════════════════════════════ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- PRIMARY WEAPON COLUMN -->
+            <Border Grid.Column="0" Background="#101826" CornerRadius="20" Padding="22" Margin="0,0,12,0"
+                    BorderBrush="#15FFFFFF" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="⚕" FontSize="36" HorizontalAlignment="Center"
+                               Foreground="#F2586B" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="1" Text="PRIMARY WEAPON" FontSize="10" FontWeight="SemiBold"
+                               Foreground="#8899AA" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="2" Text="Syringe / Crossbow slot"
+                               FontSize="11" Opacity="0.45" HorizontalAlignment="Center"
+                               Margin="0,0,0,20"/>
+
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                        <ListBox x:Name="PrimaryWeaponList"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource WeaponItemContainerStyle}"
+                                 SelectionChanged="PrimaryWeaponList_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="WeaponCard"
+                                            Background="#0C121B" CornerRadius="12" Padding="14,12"
+                                            BorderBrush="Transparent" BorderThickness="2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse x:Name="SelectDot" Width="8" Height="8"
+                                                     Fill="Transparent"
+                                                     VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding}"
+                                                       FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="White" TextWrapping="Wrap"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                            <Setter TargetName="WeaponCard" Property="BorderBrush" Value="#4ED9FF"/>
+                                            <Setter TargetName="WeaponCard" Property="Background" Value="#0A1C2E"/>
+                                            <Setter TargetName="SelectDot" Property="Fill" Value="#4ED9FF"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- SECONDARY WEAPON COLUMN -->
+            <Border Grid.Column="1" Background="#101826" CornerRadius="20" Padding="22" Margin="0,0,12,0"
+                    BorderBrush="#15FFFFFF" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="✚" FontSize="36" HorizontalAlignment="Center"
+                               Foreground="#9B6DFF" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="1" Text="SECONDARY WEAPON" FontSize="10" FontWeight="SemiBold"
+                               Foreground="#8899AA" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="2" Text="Medigun slot"
+                               FontSize="11" Opacity="0.45" HorizontalAlignment="Center"
+                               Margin="0,0,0,20"/>
+
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                        <ListBox x:Name="SecondaryWeaponList"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource WeaponItemContainerStyle}"
+                                 SelectionChanged="SecondaryWeaponList_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="WeaponCard"
+                                            Background="#0C121B" CornerRadius="12" Padding="14,12"
+                                            BorderBrush="Transparent" BorderThickness="2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse x:Name="SelectDot" Width="8" Height="8"
+                                                     Fill="Transparent"
+                                                     VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding}"
+                                                       FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="White" TextWrapping="Wrap"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                            <Setter TargetName="WeaponCard" Property="BorderBrush" Value="#9B6DFF"/>
+                                            <Setter TargetName="WeaponCard" Property="Background" Value="#120C1E"/>
+                                            <Setter TargetName="SelectDot" Property="Fill" Value="#9B6DFF"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- MELEE WEAPON COLUMN -->
+            <Border Grid.Column="2" Background="#101826" CornerRadius="20" Padding="22"
+                    BorderBrush="#15FFFFFF" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="⚔" FontSize="36" HorizontalAlignment="Center"
+                               Foreground="#FFB830" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="1" Text="MELEE WEAPON" FontSize="10" FontWeight="SemiBold"
+                               Foreground="#8899AA" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="2" Text="Bonesaw slot"
+                               FontSize="11" Opacity="0.45" HorizontalAlignment="Center"
+                               Margin="0,0,0,20"/>
+
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                        <ListBox x:Name="MeleeWeaponList"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource WeaponItemContainerStyle}"
+                                 SelectionChanged="MeleeWeaponList_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="WeaponCard"
+                                            Background="#0C121B" CornerRadius="12" Padding="14,12"
+                                            BorderBrush="Transparent" BorderThickness="2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse x:Name="SelectDot" Width="8" Height="8"
+                                                     Fill="Transparent"
+                                                     VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding}"
+                                                       FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="White" TextWrapping="Wrap"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                            <Setter TargetName="WeaponCard" Property="BorderBrush" Value="#FFB830"/>
+                                            <Setter TargetName="WeaponCard" Property="Background" Value="#1E1200"/>
+                                            <Setter TargetName="SelectDot" Property="Fill" Value="#FFB830"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══ STATUS BAR ════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2" Background="#0C121B" CornerRadius="12" Padding="16,10"
+                Margin="0,14,0,0" BorderBrush="#11FFFFFF" BorderThickness="1">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="ACTIVE LOADOUT:" FontSize="11" FontWeight="Bold"
+                               Foreground="#8899AA" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ActivePrimaryLabel"
+                               FontSize="11" FontWeight="SemiBold" Foreground="#4ED9FF"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="  /  " FontSize="11" Foreground="#8899AA" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ActiveSecondaryLabel"
+                               FontSize="11" FontWeight="SemiBold" Foreground="#9B6DFF"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="  /  " FontSize="11" Foreground="#8899AA" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ActiveMeleeLabel"
+                               FontSize="11" FontWeight="SemiBold" Foreground="#FFB830"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock x:Name="StatusLabel"
+                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                           FontSize="11" FontWeight="SemiBold" Foreground="#39D98A"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

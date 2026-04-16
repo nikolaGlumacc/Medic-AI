@@ -139,6 +139,7 @@
                             <RadioButton x:Name="SettingsBtn" Content="SETTINGS" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
                             <RadioButton x:Name="TuningBtn" Content="NEURAL TUNING" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
                             <RadioButton x:Name="MatrixBtn" Content="TRIAGE MATRIX" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
+                            <RadioButton x:Name="LoadoutBtn" Content="LOADOUT" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
                             <Border x:Name="UpdateNavBadge" Background="{StaticResource AccentAmberBrush}" CornerRadius="10" Padding="10,4" Margin="0,4,0,0" HorizontalAlignment="Left" Visibility="Collapsed">
                                 <TextBlock Text="UPDATE AVAILABLE" FontSize="10" FontWeight="Bold" Foreground="#05080E"/>
                             </Border>
