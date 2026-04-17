@@ -32,6 +32,7 @@ namespace MedicAIGUI
 
             // Default view
             NavigateTo(new DashboardView());
+            DebugLog("NAV_DASHBOARD");
             ApplyUpdateSnapshot(false);
 
             // Load weapon images

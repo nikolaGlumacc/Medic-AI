@@ -1,0 +1,249 @@
+You are a senior C# WPF engineer.
+
+I have an EXISTING .NET 8 WPF application called “MedicAI”.
+
+It already contains:
+- MainWindow with navigation between Views (DashboardView, LoadoutView, SettingsView, TuningView, MatrixView, etc.)
+- A bot service (MedicBotService) that communicates via socket
+- Existing WPF UI built with XAML + code-behind
+- Existing project structure that already compiles or is close to compiling
+
+I do NOT want a new project.
+
+I want you to ADD an internal debug / QA menu directly INTO the existing MedicAI project.
+
+The name of this internal system is:
+
+    “Inspector Pro v5”
+
+IMPORTANT:
+- DO NOT create a separate standalone application
+- DO NOT rebuild the project from scratch
+- DO NOT replace existing architecture unless absolutely necessary
+- ONLY extend the current MedicAI project
+- Add new files, new classes, new views/panels, and minimal edits to existing files
+
+---
+
+## PRIMARY GOAL
+
+Inside the EXISTING MedicAI app, create a built-in debug menu / inspector panel that can:
+
+1. Automatically click UI buttons inside MedicAI
+2. Verify correct navigation/view switching happened
+3. Validate important UI controls exist in each view
+4. Log all actions/results in real time
+5. Use a RULE-BASED system (not hardcoded random logic)
+6. Run tests sequentially
+7. Show PASS / FAIL results
+8. Help diagnose broken buttons, broken navigation, missing controls, or logic issues
+
+---
+
+## WHERE TO INTEGRATE IT
+
+Add this system INTO the current MedicAI project using one of these approaches:
+
+### Preferred:
+Add a new navigation tab/button called:
+
+    Debug
+or
+    Inspector
+
+That opens a new WPF page/usercontrol.
+
+### Acceptable alternative:
+Add a collapsible side panel in MainWindow.
+
+But it MUST be part of the EXISTING MedicAI UI.
+
+---
+
+## REQUIRED FEATURES
+
+# 1. RULE-BASED TEST SYSTEM
+
+Tests must be easy to define.
+
+Each rule should support:
+
+- Name
+- Button/control to click
+- Expected view after click
+- Required UI elements that must exist
+- Optional timeout
+
+Example:
+
+DashboardBtn -> DashboardView -> StatsPanel
+LoadoutBtn -> LoadoutView -> PrimaryWeaponList
+SettingsBtn -> SettingsView -> SaveButton
+
+Store rules in:
+- C# list
+OR
+- JSON file loaded by app
+
+Use the cleanest option.
+
+---
+
+# 2. AUTO UI TESTING
+
+Use Windows UI Automation or safe WPF-native methods to:
+
+- find controls by Name
+- simulate clicks
+- trigger navigation
+- inspect UI tree
+
+Do NOT use hacky unsafe methods.
+
+---
+
+# 3. STATE TRACKING
+
+Track:
+
+- current active view
+- last clicked button
+- last passed test
+- last failed test
+- total tests
+- passed count
+- failed count
+
+---
+
+# 4. ASSERTION SYSTEM
+
+Create helpers like:
+
+AssertView(expected)
+AssertExists(controlName)
+AssertText(controlName, expectedText)   (optional)
+AssertEnabled(controlName)             (optional)
+
+Each assertion logs PASS / FAIL.
+
+---
+
+# 5. LIVE DEBUG PANEL
+
+Inside MedicAI add a real-time debug panel showing:
+
+[timestamp] START TEST
+[timestamp] CLICK DashboardBtn
+[timestamp] PASS View = DashboardView
+[timestamp] PASS StatsPanel exists
+[timestamp] FAIL SaveButton missing
+
+Use ObservableCollection<string> so logs update live.
+
+---
+
+# 6. RUN BUTTON
+
+Inside the new Debug / Inspector menu add:
+
+[ Run All Tests ]
+[ Stop Tests ]
+[ Clear Logs ]
+
+Optional:
+[ Run Selected Test ]
+
+---
+
+# 7. TEST RESULTS UI
+
+Show:
+
+- Green = Pass
+- Red = Fail
+- Yellow = Running
+
+Include summary:
+
+Total: X
+Passed: X
+Failed: X
+
+---
+
+# 8. EXTRA USEFUL FEATURES (if cleanly possible)
+
+Add these only if they fit naturally:
+
+- Detect duplicate control names
+- Detect missing event handlers
+- Detect broken navigation buttons
+- Measure test execution time
+- Basic performance lag monitor
+- Verify socket service reachable (MedicBotService health check)
+
+---
+
+## EXISTING FILE EDIT POLICY
+
+When editing existing MedicAI files:
+
+Keep edits minimal.
+
+Examples:
+
+MainWindow.xaml:
+- add Debug button/tab
+- add panel host
+
+MainWindow.xaml.cs:
+- hook navigation
+- expose CurrentView state
+
+MedicBotService:
+- add optional health check only if clean
+
+Do NOT rewrite unrelated code.
+
+---
+
+## CODE QUALITY RULES
+
+- Must compile on .NET 8 WPF
+- Keep architecture modular
+- Separate services into new files
+- Use proper namespaces matching MedicAI
+- Use async/await correctly
+- No dead code
+- No placeholder methods unless marked clearly
+
+---
+
+## OUTPUT FORMAT I WANT FROM YOU
+
+Give me:
+
+1. Exact files to create
+2. Exact existing files to modify
+3. Full code for each file
+4. Clear placement instructions
+5. Minimal-risk integration into MedicAI
+
+---
+
+## FINAL RESULT I WANT
+
+When finished, I launch MedicAI normally.
+
+Inside MedicAI there is a Debug / Inspector menu.
+
+I click:
+
+Run All Tests
+
+Then it automatically tests the MedicAI UI, navigation, controls, and core systems, while showing live logs and pass/fail results.
+
+This must feel like a professional built-in developer tool INSIDE MedicAI.
+
+Build this cleanly and realistically.

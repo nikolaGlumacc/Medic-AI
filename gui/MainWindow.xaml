@@ -15,6 +15,23 @@
         SnapsToDevicePixels="True"
         Closing="Window_Closing">
 
+    <Border Width="300"
+            HorizontalAlignment="Right"
+            Background="#111820"
+            Opacity="0.95">
+
+        <StackPanel>
+            <TextBlock Text="INSPECTOR PRO v2"
+                    Foreground="White"
+                    FontWeight="Bold"/>
+
+            <ListBox ItemsSource="{Binding DebugEvents}"
+                    Foreground="Lime"
+                    Background="Transparent"/>
+        </StackPanel>
+    </Border>
+
+
     <Window.Resources>
         <SolidColorBrush x:Key="AccentCoolBrush" Color="#4ED9FF"/>
         <SolidColorBrush x:Key="AccentHotBrush" Color="#F2586B"/>
