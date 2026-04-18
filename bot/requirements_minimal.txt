@@ -1,0 +1,11 @@
+websockets>=12.0
+pynput>=1.7.0
+psutil>=6.0.0
+mss>=9.0.0
+opencv-contrib-python>=4.8.0
+numpy>=1.24.0
+pytesseract>=0.3.10
+flask>=3.0.0
+pywin32>=306
+pydirectinput>=1.0.4
+scipy>=1.10.0

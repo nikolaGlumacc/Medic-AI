@@ -6,33 +6,36 @@ echo ============================================
 echo      MedicAI Bot Server - Brain Launcher    
 echo ============================================
 
-REM Find Python
-set "PYTHON_EXE="
-if exist "c:\medicai_venv\Scripts\python.exe" (
-    set "PYTHON_EXE=c:\medicai_venv\Scripts\python.exe"
-) else (
-    set "PYTHON_EXE=python"
+:: ── Install Python if missing ──────────────────────────────────
+where python >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo Python not found. Downloading...
+    curl -L -o "%TEMP%\py_setup.exe" "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+    "%TEMP%\py_setup.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+    :: Refresh PATH for this session
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
 )
 
-REM Check if port 5000 is already in use
+:: ── Create venv if missing ─────────────────────────────────────
+if not exist "c:\medicai_venv\Scripts\python.exe" (
+    echo Creating virtual environment...
+    python -m venv c:\medicai_venv
+    c:\medicai_venv\Scripts\pip install --upgrade pip --quiet
+    c:\medicai_venv\Scripts\pip install -r "%~dp0bot\requirements_minimal.txt" --quiet
+    
+    :: Register pywin32 DLLs
+    c:\medicai_venv\Scripts\python.exe c:\medicai_venv\Scripts\pywin32_postinstall.py -install >nul 2>&1
+)
+
+set "PYTHON_EXE=c:\medicai_venv\Scripts\python.exe"
+
 netstat -ano | findstr /R /C:":5000 .*LISTENING" >nul
 if not errorlevel 1 (
-    echo.
-    echo [ERROR] Port 5000 is already in use.
-    echo MedicAI bot server may already be running.
-    echo.
-    pause
-    exit /b 0
+    echo Port 5000 already in use. Exiting.
+    pause & exit /b 0
 )
 
-echo.
-echo [SYSTEM] Starting MedicBot Brain on Port 5000...
-echo Ready for dashboard connection.
-echo Press Ctrl+C to stop.
-echo.
-
-"%PYTHON_EXE%" start_server.py
-
+echo [SYSTEM] Starting MedicBot Brain...
+"%PYTHON_EXE%" "%~dp0bot\bot_server.py"
 pause
 popd
-exit /b

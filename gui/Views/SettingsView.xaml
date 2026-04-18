@@ -44,7 +44,7 @@
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="0,0,16,0">
                             <TextBlock Text="Port" FontWeight="Bold"/>
-                            <TextBox x:Name="PortInput" Text="{Binding BotPort, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBox x:Name="PortInput" Text="{Binding WsPort, UpdateSourceTrigger=PropertyChanged}" />
                         </StackPanel>
                         <Button x:Name="DetectIpBtn" Grid.Column="2" Content="Detect IP" Width="110" Height="38" VerticalAlignment="Bottom" Click="DetectIpBtn_Click"/>
                     </Grid>

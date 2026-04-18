@@ -17,7 +17,7 @@ namespace MedicAIGUI.Services
 
         // Connection
         public string BotIp { get; set; } = "127.0.0.1";
-        public int BotPort { get; set; } = 8766;
+        public int WsPort { get; set; } = 8766;
 
         // UI
         public string AccentColor { get; set; } = "#4ED9FF";
@@ -169,7 +169,7 @@ namespace MedicAIGUI.Services
         public void ApplyFrom(SavedSettings other)
         {
             BotIp = other.BotIp;
-            BotPort = other.BotPort;
+            WsPort = other.WsPort;
             AccentColor = other.AccentColor;
             UiOpacity = other.UiOpacity;
             GlobalFontFamily = other.GlobalFontFamily;

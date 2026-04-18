@@ -49,6 +49,7 @@ try:
     _keyboard = KeyboardController()
 except ImportError:
     _keyboard = None
+    Key = None
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  LOGGING SHUNT (Broadcasting to GUI)
@@ -434,7 +435,7 @@ class Vision:
         self.w, self.h = self.mon["width"], self.mon["height"]
         self.ocr_ok = pytesseract is not None
         self._continue_tmpl = None
-        tmpl_path = Path("templates/continue_button.png")
+        tmpl_path = Path(__file__).parent / "templates" / "continue_button.png"
         if tmpl_path.exists():
             self._continue_tmpl = cv2.imread(str(tmpl_path))
         self._prev_blob_positions: Dict[int, Tuple[int, int]] = {}
@@ -1188,7 +1189,9 @@ class MedicBot:
                 try:
                     msg = json.loads(raw)
                     action = msg.get("action") or msg.get("type")
-                    if action == "start": self.start()
+                    if action == "start":
+                        self._gameflow_ready = True
+                        self.start()
                     elif action == "stop": self.stop()
                     elif action == "test_input":
                         logger.info("TEST_INPUT requested")

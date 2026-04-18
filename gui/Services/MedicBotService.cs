@@ -17,7 +17,20 @@ namespace MedicAIGUI.Services
 
         private ClientWebSocket? _ws;
         private string _wsUrl = "ws://localhost:8766";
-        private readonly string _configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "bot", "bot_config.json");
+        private readonly string _configPath = FindConfigPath();
+
+        private static string FindConfigPath()
+        {
+            var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            for (int i = 0; i < 8; i++)
+            {
+                if (dir == null) break;
+                var candidate = Path.Combine(dir.FullName, "bot", "bot_config.json");
+                if (File.Exists(candidate)) return candidate;
+                dir = dir.Parent;
+            }
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bot_config.json");
+        }
 
         public SavedSettings Settings { get; private set; } = new SavedSettings();
 
@@ -45,7 +58,7 @@ namespace MedicAIGUI.Services
 
         public void ApplyConnectionSettings(SavedSettings settings)
         {
-            _wsUrl = $"ws://{settings.BotIp}:{settings.BotPort}";
+            _wsUrl = $"ws://{settings.BotIp}:{settings.WsPort}";
             DebugHub.Log($"SERVICE: WS Endpoint updated to {_wsUrl}");
         }
 

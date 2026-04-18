@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
-title MedicAI Setup
+title MedicAI Setup - Deep Integration
 color 0A
 
 echo.
 echo ============================================================
-echo   MedicAI - Full Setup Script
+echo   MedicAI - Full Setup Script (Deep Integration)
 echo   This will install everything needed to run the bot.
 echo ============================================================
 echo.
@@ -14,7 +14,7 @@ echo.
 net session >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo [ERROR] Please run this script as Administrator.
-    echo Right-click setup.bat and choose "Run as administrator".
+    echo Right-click build.bat and choose "Run as administrator".
     pause
     exit /b 1
 )
@@ -28,80 +28,43 @@ if %errorLevel% NEQ 0 (
     exit /b 1
 )
 
-echo [1/7] Checking Python...
-python --version >nul 2>&1
-if %errorLevel% NEQ 0 (
-    echo Python not found. Downloading Python 3.11...
+:: ── Install Python 3.11 if missing ─────────────────────────────
+where python >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo [1/7] Python not found. Downloading Python 3.11...
     curl -L -o "%TEMP%\python_installer.exe" "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
-    echo Installing Python 3.11 (this may take a minute)...
+    echo Installing Python 3.11.9 (Quiet Mode)...
     "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-    if %errorLevel% NEQ 0 (
-        echo [ERROR] Python installation failed.
-        pause
-        exit /b 1
-    )
+    
+    :: Refresh PATH for current session
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
     echo Python installed.
-    :: Refresh PATH so python is available immediately
-    call RefreshEnv.cmd >nul 2>&1
 ) else (
+    echo [1/7] Python already installed.
     python --version
-    echo Python already installed.
 )
 
 echo.
-echo [2/7] Upgrading pip...
-python -m pip install --upgrade pip --quiet
+echo [2/7] Preparing Virtual Environment...
+if not exist "c:\medicai_venv\Scripts\python.exe" (
+    echo Creating virtual environment at c:\medicai_venv...
+    python -m venv c:\medicai_venv
+)
+c:\medicai_venv\Scripts\python.exe -m pip install --upgrade pip --quiet
 
 echo.
-echo [3/7] Installing Python dependencies...
-echo (This may take several minutes on first run)
-echo.
-
-set DEPS=^
-    opencv-python ^
-    numpy ^
-    mss ^
-    pytesseract ^
-    flask ^
-    websockets ^
-    psutil ^
-    pywin32 ^
-    pydirectinput ^
-    pynput ^
-    requests ^
-    Pillow ^
-    scipy
-
-:: Install from requirements.txt if it exists, else install manually
-if exist "%~dp0requirements.txt" (
-    echo Installing from requirements.txt...
-    python -m pip install -r "%~dp0requirements.txt" --quiet
+echo [3/7] Installing Bot Dependencies...
+if exist "%~dp0bot\requirements_minimal.txt" (
+    echo [INFO] Using requirements_minimal.txt
+    c:\medicai_venv\Scripts\pip install -r "%~dp0bot\requirements_minimal.txt" --quiet
 ) else (
-    echo Installing packages manually...
-    python -m pip install ^
-        opencv-python ^
-        numpy ^
-        mss ^
-        pytesseract ^
-        flask ^
-        websockets ^
-        psutil ^
-        pywin32 ^
-        pydirectinput ^
-        pynput ^
-        requests ^
-        Pillow ^
-        scipy ^
-        --quiet
+    echo [WARN] requirements_minimal.txt not found. Falling back to manual install.
+    c:\medicai_venv\Scripts\pip install websockets pynput psutil mss opencv-contrib-python numpy pytesseract flask pywin32 pydirectinput scipy --quiet
 )
 
-if %errorLevel% NEQ 0 (
-    echo [ERROR] Some Python packages failed to install.
-    echo Try running: python -m pip install -r requirements.txt
-    pause
-    exit /b 1
-)
-echo Python dependencies installed.
+:: ── pywin32 DLL registration fix ──────────────────────────────
+echo Registering pywin32 DLLs...
+c:\medicai_venv\Scripts\python.exe c:\medicai_venv\Scripts\pywin32_postinstall.py -install >nul 2>&1
 
 echo.
 echo [4/7] Checking Tesseract OCR...
@@ -110,90 +73,46 @@ if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
 ) else (
     echo Tesseract not found. Downloading installer...
     curl -L -o "%TEMP%\tesseract_installer.exe" "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.4.0.20240606.exe"
-    echo Installing Tesseract OCR...
+    echo Installing Tesseract OCR (Silent)...
     "%TEMP%\tesseract_installer.exe" /S
-    if %errorLevel% NEQ 0 (
-        echo [WARN] Tesseract auto-install failed.
-        echo Please install manually from:
-        echo https://github.com/UB-Mannheim/tesseract/wiki
-        echo Then re-run this script.
-    ) else (
-        echo Tesseract installed.
-    )
+    echo Tesseract installation initiated.
 )
 
 echo.
-echo [5/7] Checking .NET 8 Runtime (for GUI)...
-dotnet --list-runtimes 2>nul | findstr "Microsoft.NETCore.App 8" >nul
-if %errorLevel% NEQ 0 (
-    echo .NET 8 not found. Downloading...
-    curl -L -o "%TEMP%\dotnet_installer.exe" "https://download.microsoft.com/download/dotnet/8.0/dotnet-sdk-8.0.100-win-x64.exe"
-    echo Installing .NET 8 SDK/Runtime...
-    "%TEMP%\dotnet_installer.exe" /quiet /norestart
-    if %errorLevel% NEQ 0 (
-        echo [WARN] .NET 8 auto-install failed.
-        echo Please install manually from: https://dotnet.microsoft.com/download/dotnet/8.0
-    ) else (
-        echo .NET 8 installed.
-    )
+echo [5/7] Checking .NET 8 SDK (for GUI Build)...
+dotnet --version >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo .NET SDK not found. Downloading .NET 8 SDK...
+    curl -L -o "%TEMP%\dotnet_sdk.exe" "https://download.microsoft.com/download/dotnet/8.0/dotnet-sdk-8.0.410-win-x64.exe"
+    echo Installing .NET 8 SDK (Quiet Mode)...
+    "%TEMP%\dotnet_sdk.exe" /quiet /norestart
+    
+    :: Refresh PATH
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
 ) else (
-    echo .NET 8 already installed.
+    echo [5/7] .NET SDK already installed.
+    dotnet --version
 )
 
 echo.
 echo [6/7] Creating required folders...
-if not exist "%~dp0bot\weapons"  mkdir "%~dp0bot\weapons"
-if not exist "%~dp0bot\debug"    mkdir "%~dp0bot\debug"
-if not exist "%~dp0bot\audio"    mkdir "%~dp0bot\audio"
+if not exist "%~dp0bot\templates" mkdir "%~dp0bot\templates"
+if not exist "%~dp0bot\weapons"   mkdir "%~dp0bot\weapons"
+if not exist "%~dp0bot\debug"     mkdir "%~dp0bot\debug"
+if not exist "%~dp0bot\logs"      mkdir "%~dp0bot\logs"
 echo Folders ready.
 
 echo.
-echo [7/7] Building GUI...
+echo [7/7] Building GUI (optimized Release)...
 if exist "%~dp0gui\MedicAIGUI.csproj" (
-    cd /d "%~dp0gui"
-    dotnet build --configuration Release --nologo -v quiet
+    dotnet publish "%~dp0gui\MedicAIGUI.csproj" -c Release -r win-x64 --self-contained true -o "%~dp0publish_gui" /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
     if %errorLevel% NEQ 0 (
-        echo [WARN] GUI build failed. Check .NET installation.
+        echo [ERROR] GUI build failed.
     ) else (
-        echo GUI built successfully.
+        echo GUI published to publish_gui/
     )
-    cd /d "%~dp0"
 ) else (
-    echo [WARN] GUI project not found at gui\MedicAIGUI.csproj — skipping build.
-)
-
-:: ── Write requirements.txt if missing ────────────────────────
-if not exist "%~dp0requirements.txt" (
-    echo Writing requirements.txt...
-    (
-        echo opencv-python
-        echo numpy
-        echo mss
-        echo pytesseract
-        echo flask
-        echo websockets
-        echo psutil
-        echo pywin32
-        echo pydirectinput
-        echo pynput
-        echo requests
-        echo Pillow
-        echo scipy
-    ) > "%~dp0requirements.txt"
-)
-
-:: ── Run debug tool to verify everything ──────────────────────
-echo.
-echo ============================================================
-echo   Running diagnostics to verify installation...
-echo ============================================================
-echo.
-
-if exist "%~dp0bot\debug_tool.py" (
-    python "%~dp0bot\debug_tool.py" --ocr --vision --loadout
-) else (
-    echo [INFO] debug_tool.py not found — skipping diagnostics.
-    echo        Drop debug_tool.py into the bot\ folder to enable this.
+    echo [ERROR] GUI project not found.
 )
 
 echo.
@@ -202,9 +121,9 @@ echo   Setup complete!
 echo.
 echo   To start the bot:
 echo     - Double-click start.bat
-echo   Or manually:
-echo     1. Run:  python bot\bot_server.py
-echo     2. Run:  gui\bin\Release\net8.0-windows\MedicAIGUI.exe
+echo.
+echo   Note: Ensure TF2 is running in Windowed/Borderless mode
+echo         (-windowed -noborder in launch options)
 echo ============================================================
 echo.
 pause

@@ -12,8 +12,7 @@ async def main():
     print("• A window named 'Medic Bot Debug' will open")
     print("• Press 'q' in the debug window to stop\n")
 
-    vision = Vision(dummy_sender)
-    vision.update_config({"priority_names": ["yourname", "friend"]})
+    vision = Vision()
 
     try:
         await vision.run()
