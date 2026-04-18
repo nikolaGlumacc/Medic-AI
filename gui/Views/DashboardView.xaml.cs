@@ -102,7 +102,7 @@ namespace MedicAIGUI.Views
             SimulationBtn.Content = isSim ? "STOP SIMULATION" : "SIMULATION MODE";
             SimulationBtn.Background = isSim ? (SolidColorBrush)FindResource("AccentCoolBrush") : (SolidColorBrush)FindResource("SurfaceLightBrush");
         }
-        private void DebugSnapshotBtn_Click(object sender, RoutedEventArgs e) => _service.DebugSnapshotAsync();
+        private void DebugSnapshotBtn_Click(object sender, RoutedEventArgs e) => _ = _service.DebugSnapshotAsync();
 
         private async void DiagnosticBtn_Click(object sender, RoutedEventArgs e)
         {

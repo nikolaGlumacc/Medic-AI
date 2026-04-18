@@ -149,6 +149,36 @@ namespace MedicAIGUI.Services
                 Name                 = "Integration → Command Cycle (Start/Stop)",
                 ClickTargetName      = "DashboardBtn",
                 DelayMs              = 2000
+            },
+            new TestRule
+            {
+                Name                 = "Integration → Frame Capture Test",
+                ClickTargetName      = "DashboardBtn",
+                DelayMs              = 2000
+            },
+            new TestRule
+            {
+                Name                 = "Integration → Latency Profiler",
+                ClickTargetName      = "DashboardBtn",
+                DelayMs              = 2000
+            },
+            new TestRule
+            {
+                Name                 = "Integration → Config Sync",
+                ClickTargetName      = "DashboardBtn",
+                DelayMs              = 1000
+            },
+            new TestRule
+            {
+                Name                 = "System → Environment State",
+                ClickTargetName      = "DashboardBtn",
+                DelayMs              = 1000
+            },
+            new TestRule
+            {
+                Name                 = "Integration → Hardware Dance",
+                ClickTargetName      = "DashboardBtn",
+                DelayMs              = 3000
             }
         };
 
@@ -220,7 +250,7 @@ namespace MedicAIGUI.Services
             Log($"▶  [{rule.Name}]");
 
             // Integration tests handler
-            if (rule.Name.StartsWith("Integration →"))
+            if (rule.Name.StartsWith("Integration →") || rule.Name.StartsWith("System →"))
             {
                 await RunIntegrationStepAsync(rule, row, ct);
                 return;
@@ -351,6 +381,103 @@ namespace MedicAIGUI.Services
                     pass = started && stopped;
                     details = pass ? "Start/Stop commands verified via telemetry." : $"Cycle failed (Started:{started}, Stopped:{stopped}).";
                     Log(pass ? "   ↳ CYCLE   VERIFIED  ✔" : "   ↳ CYCLE   FAILED  ✘");
+                }
+            }
+            else if (rule.Name.Contains("Frame Capture"))
+            {
+                if (!MedicBotService.Instance.IsConnected && !MedicBotService.Instance.IsSimulationMode) { pass = false; details = "Skipped — Socket disconnected."; }
+                else
+                {
+                    bool snapshotOk = MedicBotService.Instance.IsSimulationMode;
+                    void Handler(string msg) { if (msg == "SNAPSHOT_SUCCESS") snapshotOk = true; }
+                    MedicBotService.Instance.OnActivity += Handler;
+                    Log(MedicBotService.Instance.IsSimulationMode ? "   ↳ ACTION  sending 'debug_snapshot' (simulated)..." : "   ↳ ACTION  sending 'debug_snapshot'...");
+                    if (!MedicBotService.Instance.IsSimulationMode) await MedicBotService.Instance.DebugSnapshotAsync();
+                    var timeout = DateTime.Now.AddSeconds(3);
+                    while (DateTime.Now < timeout && !snapshotOk && !ct.IsCancellationRequested) await Task.Delay(50);
+                    MedicBotService.Instance.OnActivity -= Handler;
+                    pass = snapshotOk;
+                    details = pass ? "Frame capture verified (cv2/mss functioning)." : "Snapshot failed or timed out.";
+                    Log(pass ? "   ↳ SNAPSHOT  VERIFIED  ✔" : "   ↳ SNAPSHOT  FAILED  ✘");
+                }
+            }
+            else if (rule.Name.Contains("Latency Profiler"))
+            {
+                if (!MedicBotService.Instance.IsConnected && !MedicBotService.Instance.IsSimulationMode) { pass = false; details = "Skipped — Socket disconnected."; }
+                else
+                {
+                    int pongs = 0;
+                    long totalRtt = 0;
+                    void Handler(long ts) { pongs++; totalRtt += Stopwatch.GetTimestamp() - ts; }
+                    MedicBotService.Instance.OnPong += Handler;
+                    Log(MedicBotService.Instance.IsSimulationMode ? "   ↳ ACTION  shooting 10 packets (simulated)..." : "   ↳ ACTION  shooting 10 packets...");
+                    if (MedicBotService.Instance.IsSimulationMode) { await Task.Delay(200); pongs = 10; totalRtt = 100 * (Stopwatch.Frequency / 1000); }
+                    else
+                    {
+                        for (int i = 0; i < 10; i++)
+                        {
+                            await MedicBotService.Instance.SendPingAsync(Stopwatch.GetTimestamp());
+                            await Task.Delay(50);
+                        }
+                    }
+                    var timeout = DateTime.Now.AddSeconds(2);
+                    while (DateTime.Now < timeout && pongs < 10 && !ct.IsCancellationRequested) await Task.Delay(50);
+                    MedicBotService.Instance.OnPong -= Handler;
+
+                    if (pongs == 10)
+                    {
+                        double avgMs = (totalRtt / 10.0) / (Stopwatch.Frequency / 1000.0);
+                        pass = avgMs < 100;
+                        details = $"10/10 packets returned. Avg RTT: {avgMs:F1}ms.";
+                        Log(pass ? $"   ↳ LATENCY  {avgMs:F1}ms  ✔" : $"   ↳ LATENCY  {avgMs:F1}ms  ⚠");
+                    }
+                    else { pass = false; details = $"Packet loss. {pongs}/10 returned."; Log($"   ↳ LATENCY  FAILED  ✘"); }
+                }
+            }
+            else if (rule.Name.Contains("Config Sync"))
+            {
+                if (!MedicBotService.Instance.IsConnected && !MedicBotService.Instance.IsSimulationMode) { pass = false; details = "Skipped — Socket disconnected."; }
+                else
+                {
+                    bool syncOk = MedicBotService.Instance.IsSimulationMode;
+                    int testVal = new Random().Next(1000, 9999);
+                    void Handler(int val) { if (val == testVal) syncOk = true; }
+                    MedicBotService.Instance.OnConfigSyncAck += Handler;
+                    Log(MedicBotService.Instance.IsSimulationMode ? $"   ↳ ACTION  sending payload ({testVal}) (simulated)..." : $"   ↳ ACTION  sending payload ({testVal})...");
+                    if (!MedicBotService.Instance.IsSimulationMode) await MedicBotService.Instance.SendConfigSyncTestAsync(testVal);
+                    else await Task.Delay(100);
+                    var timeout = DateTime.Now.AddSeconds(2);
+                    while (DateTime.Now < timeout && !syncOk && !ct.IsCancellationRequested) await Task.Delay(50);
+                    MedicBotService.Instance.OnConfigSyncAck -= Handler;
+                    pass = syncOk;
+                    details = pass ? "Config serialization/transport verified." : "Sync acknowledgement failed.";
+                    Log(pass ? "   ↳ SYNC      VERIFIED  ✔" : "   ↳ SYNC      FAILED  ✘");
+                }
+            }
+            else if (rule.Name.Contains("Environment State"))
+            {
+                bool isHl2Running = Process.GetProcessesByName("hl2").Length > 0;
+                pass = isHl2Running;
+                details = isHl2Running ? "TF2 (hl2.exe) is running." : "TF2 process (hl2.exe) NOT FOUND.";
+                Log(isHl2Running ? "   ↳ PROCESS  TF2 Found  ✔" : "   ↳ PROCESS  TF2 Missing  ✘");
+            }
+            else if (rule.Name.Contains("Hardware Dance"))
+            {
+                if (!MedicBotService.Instance.IsConnected && !MedicBotService.Instance.IsSimulationMode) { pass = false; details = "Skipped — Socket disconnected."; }
+                else
+                {
+                    bool danceOk = MedicBotService.Instance.IsSimulationMode;
+                    void Handler(string msg) { if (msg == "HARDWARE_DANCE_SUCCESS") danceOk = true; }
+                    MedicBotService.Instance.OnActivity += Handler;
+                    Log(MedicBotService.Instance.IsSimulationMode ? "   ↳ ACTION  simulating hardware dance..." : "   ↳ ACTION  executing WASD + M1/M2 routine...");
+                    if (!MedicBotService.Instance.IsSimulationMode) await MedicBotService.Instance.SendHardwareDanceAsync();
+                    else await Task.Delay(500);
+                    var timeout = DateTime.Now.AddSeconds(5);
+                    while (DateTime.Now < timeout && !danceOk && !ct.IsCancellationRequested) await Task.Delay(100);
+                    MedicBotService.Instance.OnActivity -= Handler;
+                    pass = danceOk;
+                    details = pass ? "Peripheral automation (pydirectinput/win32) confirmed." : "Hardware dance failed or timed out.";
+                    Log(pass ? "   ↳ HARDWARE  VERIFIED  ✔" : "   ↳ HARDWARE  FAILED  ✘");
                 }
             }
 

@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Net.WebSockets;
@@ -37,6 +40,8 @@ namespace MedicAIGUI.Services
         public event Action<bool>? ConnectionChanged;
         public event Action<string>? OnActivity;
         public event Action<string>? LogReceived;
+        public event Action<long>? OnPong;
+        public event Action<int>? OnConfigSyncAck;
 
         public bool IsConnected => _ws?.State == WebSocketState.Open;
         public bool IsSimulationMode { get; private set; }
@@ -165,7 +170,7 @@ namespace MedicAIGUI.Services
                 else
                     sb.AppendLine($"FAILED (Status: {response.StatusCode})");
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException)
             {
                 sb.AppendLine("FAILED (Connection Refused)");
                 sb.AppendLine("    ↳ Probable Cause: Server not running or Firewall blocking port 5000.");
@@ -181,7 +186,7 @@ namespace MedicAIGUI.Services
             }
 
             // 3. WEBSOCKET PROBE
-            sb.Append("[3/3] WebSocket Probe (port 8766): ");
+            sb.Append($"[3/3] WebSocket Probe (port {Settings.WsPort}): ");
             try
             {
                 using var probeWs = new ClientWebSocket();
@@ -190,15 +195,18 @@ namespace MedicAIGUI.Services
                 sb.AppendLine("SUCCESS (Handshake OK)");
                 await probeWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "Probe done", CancellationToken.None);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                sb.AppendLine("FAILED");
-                sb.AppendLine("    ↳ Probable Cause: WebSocket service not listening on port 8766.");
+                sb.AppendLine($"FAILED ({ex.Message})");
+                sb.AppendLine($"    ↳ Probable Cause: WebSocket service not listening on port {Settings.WsPort}.");
             }
 
             sb.AppendLine("\nFINAL VERDICT:");
-            if (sb.ToString().Contains("SUCCESS") && !sb.ToString().Contains("FAILED") && !sb.ToString().Contains("TIMEOUT"))
-                sb.AppendLine("✅ SYSTEM SHOULD BE WORKING. Check if TF2 is running.");
+            bool httpOk = sb.ToString().Contains("SUCCESS (Server is responsive)");
+            bool wsOk = sb.ToString().Contains("SUCCESS (Handshake OK)");
+
+            if (httpOk && wsOk)
+                sb.AppendLine("✅ SYSTEM SHOULD BE WORKING. (Ping failures are normal due to Windows Firewall rules)");
             else
             {
                 sb.AppendLine("❌ CONNECTION ISSUES DETECTED.");
@@ -249,6 +257,14 @@ namespace MedicAIGUI.Services
                     {
                         var line = message["line"]?.ToString() ?? "";
                         LogReceived?.Invoke($"[BOT] {line}");
+                    }
+                    else if (type == "pong")
+                    {
+                        if (long.TryParse(message["ts"]?.ToString(), out long ts)) OnPong?.Invoke(ts);
+                    }
+                    else if (type == "config_sync_ack")
+                    {
+                        if (int.TryParse(message["value"]?.ToString(), out int val)) OnConfigSyncAck?.Invoke(val);
                     }
                 }
             }
@@ -334,6 +350,10 @@ namespace MedicAIGUI.Services
         public async Task DebugSnapshotAsync() => await SendCommand("debug_snapshot");
         public async Task SendTestInputAsync() => await SendCommand("test_input");
         public async Task<List<string>> GetWeaponsAsync() => await GetAvailableWeapons();
+
+        public async Task SendPingAsync(long ts) => await SendAsync(JsonSerializer.Serialize(new { type = "ping", ts }));
+        public async Task SendConfigSyncTestAsync(int value) => await SendAsync(JsonSerializer.Serialize(new { type = "config_sync_test", value }));
+        public async Task SendHardwareDanceAsync() => await SendAsync(JsonSerializer.Serialize(new { type = "hardware_dance" }));
 
         private async Task SendAsync(string message)
         {

@@ -18,6 +18,7 @@ namespace MedicAIGUI.Services
         // Connection
         public string BotIp { get; set; } = "127.0.0.1";
         public int WsPort { get; set; } = 8766;
+        public int FlaskPort { get; set; } = 5000;
 
         // UI
         public string AccentColor { get; set; } = "#4ED9FF";
@@ -170,6 +171,7 @@ namespace MedicAIGUI.Services
         {
             BotIp = other.BotIp;
             WsPort = other.WsPort;
+            FlaskPort = other.FlaskPort;
             AccentColor = other.AccentColor;
             UiOpacity = other.UiOpacity;
             GlobalFontFamily = other.GlobalFontFamily;

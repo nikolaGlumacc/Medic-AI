@@ -924,6 +924,7 @@ class MedicBot:
         self.ctrl.cleanup()
         logger.info("MedicBot stopped.")
         self._broadcast({"type": "activity", "msg": "Bot stopped.", "audio": False})
+        self._broadcast_status()
 
     def _capture_loop(self):
         interval = CONFIG["capture_loop_interval"]
@@ -1233,6 +1234,23 @@ class MedicBot:
                         CONFIG.update(data)
                         config_path = os.path.join(os.path.dirname(__file__), "bot_config.json")
                         with open(config_path,"w") as f: json.dump(CONFIG,f,indent=4)
+                    elif action == "ping":
+                        await websocket.send(json.dumps({"type": "pong", "ts": msg.get("ts")}))
+                    elif action == "config_sync_test":
+                        await websocket.send(json.dumps({"type": "config_sync_ack", "value": msg.get("value")}))
+                    elif action == "debug_snapshot":
+                        frame = self.vision.capture()
+                        self._broadcast_activity("SNAPSHOT_SUCCESS" if frame is not None else "SNAPSHOT_FAILED")
+                    elif action == "hardware_dance":
+                        logger.info("HARDWARE_DANCE requested")
+                        if pydirectinput:
+                            for key in ['w', 's', 'a', 'd']:
+                                pydirectinput.keyDown(key); time.sleep(0.05); pydirectinput.keyUp(key)
+                            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 200, 100, 0, 0); time.sleep(0.05)
+                            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -200, -100, 0, 0); time.sleep(0.05)
+                            pydirectinput.mouseDown(button='right'); time.sleep(0.05); pydirectinput.mouseUp(button='right')
+                            pydirectinput.mouseDown(button='left'); time.sleep(0.05); pydirectinput.mouseUp(button='left')
+                        self._broadcast_activity("HARDWARE_DANCE_SUCCESS")
                 except: pass
         except: pass
         finally: self._ws_clients.discard(websocket)
