@@ -2,14 +2,12 @@
 pushd "%~dp0"
 echo [SYSTEM] Performing Deep System Integration...
 
-:: ── Check for .NET SDK ─────────────────────────────────────────
-dotnet --version >nul 2>&1
+:: ── Check for .NET 10 SDK ──────────────────────────────────────
+dotnet --version | findstr "^10." >nul
 if %errorlevel% NEQ 0 (
-    echo .NET SDK not found. Downloading...
-    curl -L -o "%TEMP%\dotnet_sdk.exe" "https://download.microsoft.com/download/dotnet/8.0/dotnet-sdk-8.0.410-win-x64.exe"
-    "%TEMP%\dotnet_sdk.exe" /quiet /norestart
-    :: Refresh PATH
-    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
+    echo .NET 10 SDK not found. Installing via build.bat logic...
+    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0"
+    set "PATH=%PATH%;%USERPROFILE%\.dotnet;%ProgramFiles%\dotnet"
 )
 
 :: ── Publish GUI (Release) ──────────────────────────────────────

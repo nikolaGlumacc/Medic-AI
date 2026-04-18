@@ -28,38 +28,62 @@ if %errorLevel% NEQ 0 (
     exit /b 1
 )
 
-:: ── Install Python 3.11 if missing ─────────────────────────────
-where python >nul 2>&1
+:: ── Install VC++ Redistributable ────────────────────────────────
+echo.
+echo [0/7] Checking for Visual C++ Redistributable 2015-2022...
+reg query "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Version >nul 2>&1
 if %errorlevel% NEQ 0 (
-    echo [1/7] Python not found. Downloading Python 3.11...
-    curl -L -o "%TEMP%\python_installer.exe" "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
-    echo Installing Python 3.11.9 (Quiet Mode)...
-    "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-    
-    :: Refresh PATH for current session
-    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
-    echo Python installed.
+    echo [0/7] VC++ Redistributable not found. Downloading...
+    curl -L -o "%TEMP%\vc_redist.x64.exe" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+    echo Installing VC++ Redistributable (Quiet)...
+    "%TEMP%\vc_redist.x64.exe" /quiet /norestart
+    echo VC++ Redistributable installed.
 ) else (
-    echo [1/7] Python already installed.
-    python --version
+    echo [0/7] VC++ Redistributable already installed.
+)
+
+:: ── Check Python 3.11 ─────────────────────────────────────────
+set "PYTHON_CMD=python"
+python --version 2>&1 | findstr "3.11" >nul
+if %errorlevel% NEQ 0 (
+    echo [1/7] Python 3.11 not found on default 'python' command. Checking 'py' launcher...
+    py -3.11 --version >nul 2>&1
+    if %errorlevel% EQU 0 (
+        echo [1/7] Found Python 3.11 via 'py' launcher.
+        set "PYTHON_CMD=py -3.11"
+    ) else (
+        echo [1/7] Python 3.11 not found. Downloading Python 3.11...
+        curl -L -o "%TEMP%\python_installer.exe" "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+        echo Installing Python 3.11.9 (Quiet Mode)...
+        "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+        
+        :: Refresh PATH for current session
+        for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
+        set "PYTHON_CMD=python"
+    )
+) else (
+    echo [1/7] Python 3.11 already installed and default.
 )
 
 echo.
 echo [2/7] Preparing Virtual Environment...
 if not exist "c:\medicai_venv\Scripts\python.exe" (
-    echo Creating virtual environment at c:\medicai_venv...
-    python -m venv c:\medicai_venv
+    echo Creating virtual environment at c:\medicai_venv using Python 3.11...
+    !PYTHON_CMD! -m venv c:\medicai_venv
 )
 c:\medicai_venv\Scripts\python.exe -m pip install --upgrade pip --quiet
 
 echo.
 echo [3/7] Installing Bot Dependencies...
-if exist "%~dp0bot\requirements_minimal.txt" (
-    echo [INFO] Using requirements_minimal.txt
+if exist "%~dp0requirements.txt" (
+    echo [INFO] Installing all dependencies from requirements.txt...
+    c:\medicai_venv\Scripts\pip install -r "%~dp0requirements.txt" --quiet
+) else if exist "%~dp0bot\requirements_minimal.txt" (
+    echo [INFO] requirements.txt not found. Using requirements_minimal.txt...
     c:\medicai_venv\Scripts\pip install -r "%~dp0bot\requirements_minimal.txt" --quiet
 ) else (
-    echo [WARN] requirements_minimal.txt not found. Falling back to manual install.
-    c:\medicai_venv\Scripts\pip install websockets pynput psutil mss opencv-contrib-python numpy pytesseract flask pywin32 pydirectinput scipy --quiet
+    echo [WARN] No requirements file found. Falling back to manual install.
+    c:\medicai_venv\Scripts\pip install websockets pynput psutil mss opencv-contrib-python numpy pytesseract flask pywin32 pydirectinput scipy pyautogui keyboard pyttsx3 transformers --quiet
 )
 
 :: ── pywin32 DLL registration fix ──────────────────────────────
@@ -79,18 +103,22 @@ if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
 )
 
 echo.
-echo [5/7] Checking .NET 8 SDK (for GUI Build)...
-dotnet --version >nul 2>&1
+echo [5/7] Checking .NET 10 (SDK & Desktop Runtime)...
+dotnet --list-runtimes | findstr "Microsoft.WindowsDesktop.App 10." >nul
 if %errorlevel% NEQ 0 (
-    echo .NET SDK not found. Downloading .NET 8 SDK...
-    curl -L -o "%TEMP%\dotnet_sdk.exe" "https://download.microsoft.com/download/dotnet/8.0/dotnet-sdk-8.0.410-win-x64.exe"
-    echo Installing .NET 8 SDK (Quiet Mode)...
-    "%TEMP%\dotnet_sdk.exe" /quiet /norestart
+    echo .NET 10 Desktop Runtime not found. Installing via dotnet-install...
+    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0 -Runtime windowsdesktop"
+)
+
+dotnet --version | findstr "^10." >nul
+if %errorlevel% NEQ 0 (
+    echo .NET 10 SDK not found. Installing via dotnet-install...
+    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0"
     
-    :: Refresh PATH
-    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
+    :: Refresh PATH for dotnet
+    set "PATH=%PATH%;%USERPROFILE%\.dotnet;%ProgramFiles%\dotnet"
 ) else (
-    echo [5/7] .NET SDK already installed.
+    echo [5/7] .NET 10 is already correctly installed.
     dotnet --version
 )
 
