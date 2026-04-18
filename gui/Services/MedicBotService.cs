@@ -1,6 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
+using System.Net.Http;
+using System.Net.NetworkInformation;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -129,6 +128,88 @@ namespace MedicAIGUI.Services
                 DebugHub.Log($"SERVICE: Connection failed ✘ ({ex.Message})");
                 ConnectionChanged?.Invoke(false);
             }
+        }
+
+        public async Task<string> CheckHealthAsync()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("--- CONNECTION HEALTH REPORT ---");
+            
+            string host = Settings.BotIp;
+            int port = Settings.FlaskPort;
+            
+            // 1. PING
+            sb.Append("[1/3] PING Test: ");
+            try
+            {
+                var ping = new Ping();
+                var reply = await ping.SendPingAsync(host, 2000);
+                if (reply.Status == IPStatus.Success)
+                    sb.AppendLine($"SUCCESS ({reply.RoundtripTime}ms)");
+                else
+                    sb.AppendLine($"FAILED ({reply.Status})");
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"ERROR ({ex.Message})");
+            }
+
+            // 2. HTTP HANDSHAKE
+            sb.Append("[2/3] HTTP Handshake (port 5000): ");
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                var response = await client.GetAsync($"http://{host}:{port}/status");
+                if (response.IsSuccessStatusCode)
+                    sb.AppendLine("SUCCESS (Server is responsive)");
+                else
+                    sb.AppendLine($"FAILED (Status: {response.StatusCode})");
+            }
+            catch (HttpRequestException ex)
+            {
+                sb.AppendLine("FAILED (Connection Refused)");
+                sb.AppendLine("    ↳ Probable Cause: Server not running or Firewall blocking port 5000.");
+            }
+            catch (TaskCanceledException)
+            {
+                sb.AppendLine("TIMEOUT");
+                sb.AppendLine("    ↳ Probable Cause: Network routing issue or aggressive Firewall.");
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"ERROR ({ex.Message})");
+            }
+
+            // 3. WEBSOCKET PROBE
+            sb.Append("[3/3] WebSocket Probe (port 8766): ");
+            try
+            {
+                using var probeWs = new ClientWebSocket();
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await probeWs.ConnectAsync(new Uri(_wsUrl), cts.Token);
+                sb.AppendLine("SUCCESS (Handshake OK)");
+                await probeWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "Probe done", CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                sb.AppendLine("FAILED");
+                sb.AppendLine("    ↳ Probable Cause: WebSocket service not listening on port 8766.");
+            }
+
+            sb.AppendLine("\nFINAL VERDICT:");
+            if (sb.ToString().Contains("SUCCESS") && !sb.ToString().Contains("FAILED") && !sb.ToString().Contains("TIMEOUT"))
+                sb.AppendLine("✅ SYSTEM SHOULD BE WORKING. Check if TF2 is running.");
+            else
+            {
+                sb.AppendLine("❌ CONNECTION ISSUES DETECTED.");
+                sb.AppendLine("\n--- LAPTOP & CROSS-DEVICE TIPS ---");
+                sb.AppendLine("1. Ensure machine running the bot is on 'Private' network (not 'Public').");
+                sb.AppendLine("2. Run build.bat as Administrator to auto-configure Firewall.");
+                sb.AppendLine("3. Ensure target laptop's IP address matches 'Bot Account IP' in Settings.");
+                sb.AppendLine("4. Disable 'Aggressive Power Saving' in Windows Battery settings.");
+            }
+
+            return sb.ToString();
         }
 
         public void Disconnect()

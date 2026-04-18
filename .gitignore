@@ -52,6 +52,9 @@ obj/
 # Build outputs
 gui/bin/
 gui/obj/
+publish_gui/
+publish_gui_test/
+Debug/
 
 # YOLOv8 Model (large file)
 yolov8n.pt

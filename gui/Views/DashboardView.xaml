@@ -15,7 +15,14 @@
         <!-- CONNECTION + DEPLOY -->
         <Border Grid.Row="0" Grid.Column="0" Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,16,16">
             <StackPanel>
-                <TextBlock Text="Connection" FontWeight="Bold" FontSize="18" Margin="0,0,0,12"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock Text="Connection" FontWeight="Bold" FontSize="18"/>
+                    <Ellipse x:Name="ConnIndicator" Width="10" Height="10" Fill="#F2586B" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#F2586B" BlurRadius="8" ShadowDepth="0"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
+                </StackPanel>
 
                 <!-- START / STOP deploy row -->
                 <Grid Margin="0,0,0,14">
@@ -32,6 +39,8 @@
                 </Grid>
 
                 <WrapPanel Margin="0,0,0,12">
+                    <Button x:Name="DiagnosticBtn" Content="DIAGNOSTIC" Width="110" Height="36" Margin="0,0,8,8" 
+                            Background="#4ED9FF" Foreground="#05080E" FontWeight="Bold" Click="DiagnosticBtn_Click"/>
                     <Button x:Name="RefreshBtn" Content="Refresh Status" Width="130" Height="36" Margin="0,0,8,8" Click="RefreshBtn_Click"/>
                     <Button x:Name="SyncConfigBtn" Content="Sync Config" Width="110" Height="36" Margin="0,0,8,8" Click="SyncConfigBtn_Click"/>
                     <Button x:Name="FetchWeaponsBtn" Content="Fetch Weapons" Width="125" Height="36" Margin="0,0,8,8" Click="FetchWeaponsBtn_Click"/>

@@ -6,11 +6,20 @@ color 0A
 echo.
 echo ============================================================
 echo   MedicAI - Full Setup Script (Deep Integration)
-echo   This will install everything needed to run the bot.
+echo   Choose your setup mode:
+echo     [1] FULL BOT SETUP (Gaming Machine - Downloads Brain/OCR)
+echo     [2] REMOTE DASHBOARD ONLY (Laptop - Fast, Single Folder)
 echo ============================================================
 echo.
+set /p MODE="Select mode [1 or 2]: "
 
-:: ── Check admin ──────────────────────────────────────────────
+if "%MODE%"=="2" (
+    echo [SYSTEM] Remote Dashboard Mode selected. Skipping heavy dependencies...
+    goto :GUI_ONLY
+)
+
+:: ── Check admin (Required for Full Setup) ──────────────────────
+
 net session >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo [ERROR] Please run this script as Administrator.
@@ -122,13 +131,35 @@ if %errorlevel% NEQ 0 (
     dotnet --version
 )
 
-echo.
-echo [6/7] Creating required folders...
-if not exist "%~dp0bot\templates" mkdir "%~dp0bot\templates"
-if not exist "%~dp0bot\weapons"   mkdir "%~dp0bot\weapons"
-if not exist "%~dp0bot\debug"     mkdir "%~dp0bot\debug"
-if not exist "%~dp0bot\logs"      mkdir "%~dp0bot\logs"
 echo Folders ready.
+
+:GUI_ONLY
+echo.
+echo [SYSTEM] Ensuring .NET 10 is available...
+dotnet --version >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo [INFO] .NET SDK not found. Installing minimal runtime for Dashboard...
+    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0 -Runtime windowsdesktop"
+    set "PATH=%PATH%;%USERPROFILE%\.dotnet;%ProgramFiles%\dotnet"
+)
+
+echo.
+
+ 
+echo.
+echo [6.5/7] Configuring Windows Firewall...
+netsh advfirewall firewall show rule name="MedicAI Flask API" >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo [INFO] Adding Firewall exception for Flask API (Port 5000)...
+    netsh advfirewall firewall add rule name="MedicAI Flask API" dir=in action=allow protocol=TCP localport=5000 >nul
+)
+netsh advfirewall firewall show rule name="MedicAI WebSocket" >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo [INFO] Adding Firewall exception for WebSocket (Port 8766)...
+    netsh advfirewall firewall add rule name="MedicAI WebSocket" dir=in action=allow protocol=TCP localport=8766 >nul
+)
+echo Firewall configured.
+
 
 echo.
 echo [7/7] Building GUI (optimized Release)...

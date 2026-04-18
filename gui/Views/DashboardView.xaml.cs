@@ -69,6 +69,15 @@ namespace MedicAIGUI.Views
             SyncConfigBtn.IsEnabled = connected;
             FetchWeaponsBtn.IsEnabled = connected;
             DebugSnapshotBtn.IsEnabled = connected;
+
+            if (ConnIndicator != null)
+            {
+                ConnIndicator.Fill = new SolidColorBrush(connected ? (Color)ColorConverter.ConvertFromString("#39D98A") : (Color)ColorConverter.ConvertFromString("#F2586B"));
+                if (ConnIndicator.Effect is System.Windows.Media.Effects.DropShadowEffect ds)
+                {
+                    ds.Color = connected ? (Color)ColorConverter.ConvertFromString("#39D98A") : (Color)ColorConverter.ConvertFromString("#F2586B");
+                }
+            }
         }
 
         // Event handlers
@@ -94,6 +103,40 @@ namespace MedicAIGUI.Views
             SimulationBtn.Background = isSim ? (SolidColorBrush)FindResource("AccentCoolBrush") : (SolidColorBrush)FindResource("SurfaceLightBrush");
         }
         private void DebugSnapshotBtn_Click(object sender, RoutedEventArgs e) => _service.DebugSnapshotAsync();
+
+        private async void DiagnosticBtn_Click(object sender, RoutedEventArgs e)
+        {
+            LogOutput.AppendText($"[{DateTime.Now:HH:mm:ss}] [DIAGNOSTIC] Running system health check...\n");
+            LogOutput.ScrollToEnd();
+            
+            DiagnosticBtn.IsEnabled = false;
+            DiagnosticBtn.Content = "TESTING...";
+            
+            try
+            {
+                string report = await _service.CheckHealthAsync();
+                
+                // Print to log
+                LogOutput.AppendText($"\n{report}\n");
+                LogOutput.ScrollToEnd();
+
+                // If health check passed but we are not connected, try one last time
+                if (report.Contains("✅") && !_service.IsConnected)
+                {
+                    LogOutput.AppendText($"[{DateTime.Now:HH:mm:ss}] [DIAGNOSTIC] Health OK, retrying connection...\n");
+                    await _service.ConnectAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogOutput.AppendText($"[{DateTime.Now:HH:mm:ss}] [ERROR] Diagnostic failed: {ex.Message}\n");
+            }
+            finally
+            {
+                DiagnosticBtn.IsEnabled = true;
+                DiagnosticBtn.Content = "DIAGNOSTIC";
+            }
+        }
 
         // Log toolbar
         private void CopyLogBtn_Click(object sender, RoutedEventArgs e)

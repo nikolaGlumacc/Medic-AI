@@ -67,8 +67,36 @@ class WebSocketLogHandler(logging.Handler):
         except:
             pass
 
+import ctypes
+import os
+import sys
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  LAPTOP OPTIMIZATION: DPI Awareness & Process Priority
+# ──────────────────────────────────────────────────────────────────────────────
+def optimize_for_laptop():
+    # 1. DPI Awareness (Ensures mss/win32 mouse coords match actual pixels on scaled laptop screens)
+    try:
+        # 2 = Per-Monitor DPI Aware (better for Win 10/11)
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+    # 2. Process Priority (Prevents power-throttling on laptops)
+    try:
+        # HIGH_PRIORITY_CLASS = 0x00000080
+        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00000080)
+    except Exception:
+        pass
+
+optimize_for_laptop()
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("MedicAI")
+
 DEFAULTS: Dict = {
     # Connection
     "ws_port": 8766,
