@@ -151,6 +151,11 @@ namespace MedicAIGUI.Services
                         OnActivity?.Invoke(msg);
                         LogReceived?.Invoke(msg);
                     }
+                    else if (type == "terminal_log")
+                    {
+                        var line = message["line"]?.ToString() ?? "";
+                        LogReceived?.Invoke($"[BOT] {line}");
+                    }
                 }
             }
             catch { }

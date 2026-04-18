@@ -70,7 +70,7 @@ set DEPS=^
     pynput ^
     requests ^
     Pillow ^
-    newtonsoft-json
+    scipy
 
 :: Install from requirements.txt if it exists, else install manually
 if exist "%~dp0requirements.txt" (
@@ -91,6 +91,7 @@ if exist "%~dp0requirements.txt" (
         pynput ^
         requests ^
         Pillow ^
+        scipy ^
         --quiet
 )
 
@@ -122,21 +123,21 @@ if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
 )
 
 echo.
-echo [5/7] Checking .NET 10 Runtime (for GUI)...
-dotnet --list-runtimes 2>nul | findstr "Microsoft.NETCore.App 10" >nul
+echo [5/7] Checking .NET 8 Runtime (for GUI)...
+dotnet --list-runtimes 2>nul | findstr "Microsoft.NETCore.App 8" >nul
 if %errorLevel% NEQ 0 (
-    echo .NET 10 not found. Downloading...
-    curl -L -o "%TEMP%\dotnet_installer.exe" "https://download.microsoft.com/download/dotnet/10.0/dotnet-runtime-10.0.0-win-x64.exe"
-    echo Installing .NET 10 Runtime...
+    echo .NET 8 not found. Downloading...
+    curl -L -o "%TEMP%\dotnet_installer.exe" "https://download.microsoft.com/download/dotnet/8.0/dotnet-sdk-8.0.100-win-x64.exe"
+    echo Installing .NET 8 SDK/Runtime...
     "%TEMP%\dotnet_installer.exe" /quiet /norestart
     if %errorLevel% NEQ 0 (
-        echo [WARN] .NET 10 auto-install failed.
-        echo Please install manually from: https://dotnet.microsoft.com/download/dotnet/10.0
+        echo [WARN] .NET 8 auto-install failed.
+        echo Please install manually from: https://dotnet.microsoft.com/download/dotnet/8.0
     ) else (
-        echo .NET 10 installed.
+        echo .NET 8 installed.
     )
 ) else (
-    echo .NET 10 already installed.
+    echo .NET 8 already installed.
 )
 
 echo.
@@ -177,6 +178,7 @@ if not exist "%~dp0requirements.txt" (
         echo pynput
         echo requests
         echo Pillow
+        echo scipy
     ) > "%~dp0requirements.txt"
 )
 
@@ -202,7 +204,7 @@ echo   To start the bot:
 echo     - Double-click start.bat
 echo   Or manually:
 echo     1. Run:  python bot\bot_server.py
-echo     2. Run:  gui\bin\Release\net10.0-windows\MedicAIGUI.exe
+echo     2. Run:  gui\bin\Release\net8.0-windows\MedicAIGUI.exe
 echo ============================================================
 echo.
 pause

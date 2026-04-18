@@ -50,12 +50,24 @@ try:
 except ImportError:
     _keyboard = None
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  LOGGING SHUNT (Broadcasting to GUI)
+# ═══════════════════════════════════════════════════════════════════════════════
+class WebSocketLogHandler(logging.Handler):
+    def __init__(self, bot_instance):
+        super().__init__()
+        self.bot = bot_instance
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            # Use threading to avoid blocking the main logger
+            threading.Thread(target=self.bot._broadcast_terminal, args=(msg,), daemon=True).start()
+        except:
+            pass
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("MedicAI")
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  CONFIGURATION (original keys + new tracking params)
-# ═══════════════════════════════════════════════════════════════════════════════
 DEFAULTS: Dict = {
     # Connection
     "ws_port": 8766,
@@ -869,7 +881,13 @@ class MedicBot:
         threading.Thread(target=self._brain_loop, daemon=True).start()
         threading.Thread(target=self._cpu_temp_loop, daemon=True).start()
         threading.Thread(target=self._scoreboard_loop, daemon=True).start()
-        logger.info("MedicBot started.")
+        # Initialize logger shunt
+        self._ws_log_handler = WebSocketLogHandler(self)
+        self._ws_log_handler.setLevel(logging.INFO)
+        self._ws_log_handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(self._ws_log_handler)
+        
+        logger.info("MedicBot system initialized.")
         self._broadcast({"type": "activity", "msg": "Bot started.", "audio": False})
 
     def stop(self):
