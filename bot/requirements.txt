@@ -13,3 +13,4 @@ pydirectinput
 keyboard
 numpy
 pyttsx3
+scipy

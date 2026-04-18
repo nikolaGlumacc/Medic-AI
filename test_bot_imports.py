@@ -24,18 +24,18 @@ def test_imports():
 
         # Test basic bot server import
         try:
-            from bot_server import MedicAIBot
-            print("  [OK] MedicAIBot class imported successfully")
+            from bot_server import MedicBot
+            print("  [OK] MedicBot class imported successfully")
 
             # Test basic instantiation
-            bot = MedicAIBot()
-            print("  [OK] MedicAIBot instance created successfully")
+            bot = MedicBot()
+            print("  [OK] MedicBot instance created successfully")
 
         except ImportError as e:
-            print(f"  [FAIL] Failed to import MedicAIBot: {e}")
+            print(f"  [FAIL] Failed to import MedicBot: {e}")
             return False
         except Exception as e:
-            print(f"  [FAIL] Failed to create MedicAIBot instance: {e}")
+            print(f"  [FAIL] Failed to create MedicBot instance: {e}")
             return False
 
     except ImportError as e:

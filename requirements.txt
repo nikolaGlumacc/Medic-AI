@@ -13,3 +13,4 @@ pywin32>=306
 pyttsx3>=2.90
 pydirectinput>=1.0.4
 transformers>=4.40.0
+scipy>=1.10.0

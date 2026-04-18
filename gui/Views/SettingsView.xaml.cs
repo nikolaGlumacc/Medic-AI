@@ -60,8 +60,10 @@ namespace MedicAIGUI.Views
 
         private async void SyncAll_Click(object sender, RoutedEventArgs e)
         {
-            SaveToBot_Click(sender, e);   // No await – it's a void method
+            // PRO FIX: We use SyncConfigAsync which now serializes the WHOLE object with proper JsonPropertyName mapping.
+            // No more manual dictionary building needed here.
             await _service.SyncConfigAsync();
+            UnsavedIndicator.Visibility = Visibility.Collapsed;
         }
 
         private void SaveProfileBtn_Click(object sender, RoutedEventArgs e)

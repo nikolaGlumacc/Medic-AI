@@ -13,17 +13,16 @@ if %errorlevel% neq 0 (
     goto end
 )
 
+REM Launch the Python Bot Server in a separate window
+echo [SYSTEM] Starting MedicBot Brain...
+start "MedicAI Bot Server" cmd /c "start_server.bat"
+
+REM Wait a few seconds for the server to bind ports
+timeout /t 3 /nobreak >nul
+
 cd /d "%~dp0publish_gui"
 echo [SYSTEM] Launching Command Deck...
 MedicAIGUI.exe
-
-if exist "CRASH_LOG.txt" (
-    echo.
-    echo [FATAL ERROR] The app crashed on startup.
-    echo --- ERROR DETAILS FROM CRASH_LOG.txt ---
-    type "CRASH_LOG.txt"
-    echo.
-)
 
 :end
 pause

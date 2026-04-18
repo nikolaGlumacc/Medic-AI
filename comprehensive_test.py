@@ -123,19 +123,18 @@ def test_bot_server_import():
     print_header("TEST 2: Bot Server Module Import")
 
     try:
-        from bot_server import MedicAIBot
-        print_success("MedicAIBot class imported successfully")
+        from bot_server import MedicBot
+        print_success("MedicBot class imported successfully")
 
         try:
-            bot = MedicAIBot()
-            print_success("MedicAIBot instance created successfully")
-            print_info(f"Bot configuration path: {bot.config or 'Not loaded'}")
+            bot = MedicBot()
+            print_success("MedicBot instance created successfully")
             return True, bot
         except Exception as e:
-            print_error(f"Failed to instantiate MedicAIBot: {e}")
+            print_error(f"Failed to instantiate MedicBot: {e}")
             return False, None
     except ImportError as e:
-        print_error(f"Failed to import MedicAIBot: {e}")
+        print_error(f"Failed to import MedicBot: {e}")
         return False, None
 
 # ============================================================================
@@ -146,14 +145,14 @@ def test_vision_engine():
     print_header("TEST 3: Vision Engine Initialization")
 
     try:
-        from bot_server import VisionEngine
-        if VisionEngine is None:
-            print_warning("VisionEngine is None - dependencies not available")
+        from bot_server import Vision
+        if Vision is None:
+            print_warning("Vision is None - dependencies not available")
             return False
 
         try:
-            vision = VisionEngine()
-            print_success("VisionEngine instance created")
+            vision = Vision()
+            print_success("Vision instance created")
 
             # Check if YOLO model loaded
             if vision.model:
@@ -188,9 +187,9 @@ async def test_bot_server_startup():
     print_header("TEST 4: Bot Server Startup & WebSocket Listening")
 
     try:
-        from bot_server import MedicAIBot
+        from bot_server import MedicBot
 
-        bot = MedicAIBot()
+        bot = MedicBot()
         print_success("Bot instance created")
 
         # Create event loop
@@ -233,8 +232,8 @@ async def test_websocket_connection():
         import websockets
 
         # Start bot server in background
-        from bot_server import MedicAIBot
-        bot = MedicAIBot()
+        from bot_server import MedicBot
+        bot = MedicBot()
 
         # Start server
         server_task = asyncio.create_task(bot.run_server())

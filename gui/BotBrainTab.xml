@@ -1,4 +1,4 @@
-                            <<TabItem Header="Bot Brain">
+                            <TabItem Header="Bot Brain">
                             <Border Margin="0,8,0,0" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Text="Decision Thresholds" Style="{StaticResource TitleText}" />

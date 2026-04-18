@@ -192,9 +192,15 @@ CONFIG: Dict = dict(DEFAULTS)
 
 def load_config():
     global CONFIG
-    if os.path.exists("bot_config.json"):
-        with open("bot_config.json") as f:
-            CONFIG.update(json.load(f))
+    # FIX: Ensure config is loaded from script's directory, not root
+    config_path = os.path.join(os.path.dirname(__file__), "bot_config.json")
+    if os.path.exists(config_path):
+        with open(config_path) as f:
+            try:
+                data = json.load(f)
+                CONFIG.update(data)
+            except Exception as e:
+                logger.error(f"Failed to load config: {e}")
 load_config()
 
 _tess_path = CONFIG.get("tesseract_path", "")
@@ -1174,8 +1180,10 @@ class MedicBot:
                         if pydirectinput: pydirectinput.press('n')
                         self._broadcast_activity("TEST_INPUT_SUCCESS")
                     elif action == "config":
-                        CONFIG.update(msg.get("config", {}))
-                        with open("bot_config.json","w") as f: json.dump(CONFIG,f,indent=4)
+                        data = msg.get("config", {})
+                        CONFIG.update(data)
+                        config_path = os.path.join(os.path.dirname(__file__), "bot_config.json")
+                        with open(config_path,"w") as f: json.dump(CONFIG,f,indent=4)
                 except: pass
         except: pass
         finally: self._ws_clients.discard(websocket)

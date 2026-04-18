@@ -1,6 +1,6 @@
 import asyncio
 import cv2
-from bot_server import MedicVisionClassic
+from bot_server import Vision
 
 async def dummy_sender(msg):
     print(f"[BOT] {msg}")
@@ -12,7 +12,7 @@ async def main():
     print("• A window named 'Medic Bot Debug' will open")
     print("• Press 'q' in the debug window to stop\n")
 
-    vision = MedicVisionClassic(dummy_sender)
+    vision = Vision(dummy_sender)
     vision.update_config({"priority_names": ["yourname", "friend"]})
 
     try:

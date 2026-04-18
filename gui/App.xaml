@@ -24,6 +24,10 @@
         <SolidColorBrush x:Key="TextMainBrush"     Color="#F6F7FB" />
         <SolidColorBrush x:Key="TextMutedBrush"    Color="#B0C4DE" />
 
+        <SolidColorBrush x:Key="SurfaceLightBrush" Color="#2A3548" />
+        <SolidColorBrush x:Key="SurfaceDarkBrush"  Color="#0A111A" />
+        <SolidColorBrush x:Key="SurfaceMidBrush"   Color="#1C2840" />
+
         <CornerRadius x:Key="PanelRadius">24</CornerRadius>
         <CornerRadius x:Key="CardRadius">16</CornerRadius>
         <CornerRadius x:Key="InputRadius">10</CornerRadius>
