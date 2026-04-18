@@ -92,6 +92,18 @@ def optimize_for_laptop():
     except Exception:
         pass
 
+    # 3. Disable QuickEdit Mode (Prevents bot from freezing when clicking inside the terminal)
+    try:
+        kernel32 = ctypes.windll.kernel32
+        hStdin = kernel32.GetStdHandle(-10) # STD_INPUT_HANDLE
+        mode = ctypes.c_uint32()
+        kernel32.GetConsoleMode(hStdin, ctypes.byref(mode))
+        # Remove ENABLE_QUICK_EDIT_MODE (0x0040) and ensure ENABLE_EXTENDED_FLAGS (0x0080) is on
+        new_mode = (mode.value & ~0x0040) | 0x0080
+        kernel32.SetConsoleMode(hStdin, new_mode)
+    except Exception:
+        pass
+
 optimize_for_laptop()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
