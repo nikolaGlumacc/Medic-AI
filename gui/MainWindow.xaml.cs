@@ -78,29 +78,13 @@ namespace MedicAIGUI
 
             switch (name)
             {
-                case "DashboardBtn":
-                    NavigateTo(new DashboardView());
-                    break;
-
-                case "PriorityBtn":
-                    NavigateTo(new PriorityPlayersView());
-                    break;
-
-                case "SettingsBtn":
-                    NavigateTo(new SettingsView());
-                    break;
-
-                case "TuningBtn":
-                    NavigateTo(new TuningView());
-                    break;
-
-                case "MatrixBtn":
-                    NavigateTo(new MatrixView());
-                    break;
-
-                case "LoadoutBtn":
-                    NavigateTo(new LoadoutView());
-                    break;
+                case "DashboardBtn":  NavigateTo(new DashboardView());       break;
+                case "PriorityBtn":   NavigateTo(new PriorityPlayersView()); break;
+                case "SettingsBtn":   NavigateTo(new SettingsView());        break;
+                case "TuningBtn":     NavigateTo(new TuningView());          break;
+                case "MatrixBtn":     NavigateTo(new MatrixView());          break;
+                case "LoadoutBtn":    NavigateTo(new LoadoutView());         break;
+                case "InspectorBtn":  NavigateTo(new InspectorView());       break;
             }
 
             DebugHub.Log($"BUTTON_CLICK: {name}");
@@ -133,17 +117,6 @@ namespace MedicAIGUI
         {
             _settings.SaveSettings();
             DebugHub.Log("SETTINGS_SAVED_ON_CLOSE");
-        }
-
-        // 🔥 Optional hook for inspector UI button
-        private async void RunInspectorTests_Click(object sender, RoutedEventArgs e)
-        {
-            DebugHub.Log("INSPECTOR_TEST_START");
-
-            var tester = new UiAutoTester(this);
-            await tester.Run(this);
-
-            DebugHub.Log("INSPECTOR_TEST_END");
         }
     }
 }

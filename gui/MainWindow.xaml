@@ -15,52 +15,41 @@
         SnapsToDevicePixels="True"
         Closing="Window_Closing">
 
-    <Border Width="300"
-            HorizontalAlignment="Right"
-            Background="#111820"
-            Opacity="0.95">
-
-        <StackPanel>
-            <TextBlock Text="INSPECTOR PRO v2"
-                    Foreground="White"
-                    FontWeight="Bold"/>
-
-            <ListBox ItemsSource="{Binding DebugEvents}"
-                    Foreground="Lime"
-                    Background="Transparent"/>
-        </StackPanel>
-    </Border>
-
-
     <Window.Resources>
-        <SolidColorBrush x:Key="AccentCoolBrush" Color="#4ED9FF"/>
-        <SolidColorBrush x:Key="AccentHotBrush" Color="#F2586B"/>
-        <SolidColorBrush x:Key="AccentGreenBrush" Color="#2ECC71"/>
-        <SolidColorBrush x:Key="AccentPurpleBrush" Color="#A569BD"/>
-        <SolidColorBrush x:Key="AccentAmberBrush" Color="#F39C12"/>
-        <SolidColorBrush x:Key="TextMutedBrush" Color="#8899AA"/>
+        <SolidColorBrush x:Key="AccentCoolBrush"   Color="#4ED9FF"/>
+        <SolidColorBrush x:Key="AccentHotBrush"    Color="#F2586B"/>
+        <SolidColorBrush x:Key="AccentGreenBrush"  Color="#39D98A"/>
+        <SolidColorBrush x:Key="AccentPurpleBrush" Color="#9B6DFF"/>
+        <SolidColorBrush x:Key="AccentAmberBrush"  Color="#FFB830"/>
+        <SolidColorBrush x:Key="TextMutedBrush"    Color="#8899AA"/>
 
         <Style x:Key="NavItemStyle" TargetType="RadioButton">
-            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Margin" Value="0,0,0,12"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Root" Background="Transparent" CornerRadius="14" Padding="15,14" BorderThickness="1" BorderBrush="Transparent">
+                        <Border x:Name="Root" Background="Transparent" CornerRadius="14"
+                                Padding="15,14" BorderThickness="1" BorderBrush="Transparent">
                             <StackPanel Orientation="Horizontal">
-                                <Rectangle x:Name="Indicator" Width="4" Height="20" Fill="{StaticResource AccentCoolBrush}" RadiusX="2" RadiusY="2" Margin="0,0,15,0" Visibility="Collapsed" />
-                                <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" />
+                                <Rectangle x:Name="Indicator" Width="4" Height="20"
+                                           Fill="{StaticResource AccentCoolBrush}"
+                                           RadiusX="2" RadiusY="2"
+                                           Margin="0,0,15,0" Visibility="Collapsed"/>
+                                <TextBlock x:Name="Txt" Text="{TemplateBinding Content}"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextMutedBrush}"/>
                             </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#0FFFFFFF" />
-                                <Setter TargetName="Txt" Property="Foreground" Value="White" />
+                                <Setter TargetName="Root" Property="Background" Value="#0FFFFFFF"/>
+                                <Setter TargetName="Txt"  Property="Foreground" Value="White"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#15FFFFFF" />
-                                <Setter TargetName="Root" Property="BorderBrush" Value="#22FFFFFF" />
-                                <Setter TargetName="Indicator" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="Txt" Property="Foreground" Value="White" />
+                                <Setter TargetName="Root" Property="Background"   Value="#15FFFFFF"/>
+                                <Setter TargetName="Root" Property="BorderBrush"  Value="#22FFFFFF"/>
+                                <Setter TargetName="Indicator" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Txt"  Property="Foreground"   Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -69,20 +58,20 @@
         </Style>
 
         <Style x:Key="GhostBtn" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="18"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background"  Value="Transparent"/>
+            <Setter Property="Foreground"  Value="White"/>
+            <Setter Property="FontSize"    Value="18"/>
+            <Setter Property="FontWeight"  Value="Bold"/>
+            <Setter Property="Cursor"      Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="8">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#22FFFFFF"/>
+                                <Setter TargetName="Root" Property="Background" Value="#22FFFFFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -95,28 +84,32 @@
         </Style>
 
         <Style x:Key="MicroLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize"    Value="10"/>
+            <Setter Property="Foreground"  Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="FontWeight"  Value="SemiBold"/>
         </Style>
 
         <Storyboard x:Key="FadeInView">
-            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="20" To="0" Duration="0:0:0.3">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </DoubleAnimation.EasingFunction>
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                             From="20" To="0" Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
             </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.3"/>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                             From="0" To="1" Duration="0:0:0.3"/>
         </Storyboard>
     </Window.Resources>
 
-    <Border x:Name="MainContainer" Margin="10" CornerRadius="32" Background="#0C121B" BorderBrush="#18FFFFFF" BorderThickness="1" ClipToBounds="True">
+    <Border x:Name="MainContainer"
+            Margin="10" CornerRadius="32"
+            Background="#0C121B"
+            BorderBrush="#18FFFFFF" BorderThickness="1"
+            ClipToBounds="True">
         <Border.Effect>
             <DropShadowEffect BlurRadius="20" Opacity="0.5" ShadowDepth="0"/>
         </Border.Effect>
-        
+
         <Grid>
-            <!-- Background Orbs (Decorative) -->
+            <!-- Decorative background orbs -->
             <Canvas HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
                 <Ellipse Width="600" Height="600" Fill="#1A4ED9FF" Canvas.Left="-150" Canvas.Top="-150">
                     <Ellipse.Effect><BlurEffect Radius="150"/></Ellipse.Effect>
@@ -128,85 +121,133 @@
 
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="300" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="300"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- SIDEBAR -->
-                <Border Grid.RowSpan="2" BorderBrush="#11FFFFFF" BorderThickness="0,0,1,0" Padding="30,40">
+                <!-- ═══ SIDEBAR ══════════════════════════════════════════════ -->
+                <Border Grid.RowSpan="2"
+                        BorderBrush="#11FFFFFF" BorderThickness="0,0,1,0"
+                        Padding="30,40">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,50">
-                                <TextBlock Text="✚" FontSize="28" Foreground="{StaticResource AccentHotBrush}" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                                <TextBlock Text="MEDIC-AI" FontSize="22" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                            <!-- Logo -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,40">
+                                <TextBlock Text="✚" FontSize="28"
+                                           Foreground="{StaticResource AccentHotBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                <TextBlock Text="MEDIC-AI" FontSize="22" FontWeight="Bold"
+                                           Foreground="White" VerticalAlignment="Center"/>
                             </StackPanel>
-                            
-                            <RadioButton x:Name="DashboardBtn" Content="DASHBOARD" Style="{StaticResource NavItemStyle}" IsChecked="True" Checked="NavBtn_Checked" />
-                            <RadioButton x:Name="PriorityBtn" Content="PRIORITY &amp; PLAYERS" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
-                            <RadioButton x:Name="SettingsBtn" Content="SETTINGS" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
-                            <RadioButton x:Name="TuningBtn" Content="NEURAL TUNING" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
-                            <RadioButton x:Name="MatrixBtn" Content="TRIAGE MATRIX" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
-                            <RadioButton x:Name="LoadoutBtn" Content="LOADOUT" Style="{StaticResource NavItemStyle}" Checked="NavBtn_Checked" />
-                            <Border x:Name="UpdateNavBadge" Background="{StaticResource AccentAmberBrush}" CornerRadius="10" Padding="10,4" Margin="0,4,0,0" HorizontalAlignment="Left" Visibility="Collapsed">
-                                <TextBlock Text="UPDATE AVAILABLE" FontSize="10" FontWeight="Bold" Foreground="#05080E"/>
+
+                            <!-- Nav buttons -->
+                            <RadioButton x:Name="DashboardBtn" Content="DASHBOARD"
+                                         Style="{StaticResource NavItemStyle}"
+                                         IsChecked="True" Checked="NavBtn_Checked"/>
+                            <RadioButton x:Name="PriorityBtn"  Content="PRIORITY &amp; PLAYERS"
+                                         Style="{StaticResource NavItemStyle}"
+                                         Checked="NavBtn_Checked"/>
+                            <RadioButton x:Name="SettingsBtn"  Content="SETTINGS"
+                                         Style="{StaticResource NavItemStyle}"
+                                         Checked="NavBtn_Checked"/>
+                            <RadioButton x:Name="TuningBtn"    Content="NEURAL TUNING"
+                                         Style="{StaticResource NavItemStyle}"
+                                         Checked="NavBtn_Checked"/>
+                            <RadioButton x:Name="MatrixBtn"    Content="TRIAGE MATRIX"
+                                         Style="{StaticResource NavItemStyle}"
+                                         Checked="NavBtn_Checked"/>
+                            <RadioButton x:Name="LoadoutBtn"   Content="LOADOUT"
+                                         Style="{StaticResource NavItemStyle}"
+                                         Checked="NavBtn_Checked"/>
+
+                            <!-- Inspector Pro nav button -->
+                            <RadioButton x:Name="InspectorBtn" Content="⚙  INSPECTOR PRO"
+                                         Style="{StaticResource NavItemStyle}"
+                                         Checked="NavBtn_Checked"/>
+
+                            <!-- Update badge -->
+                            <Border x:Name="UpdateNavBadge"
+                                    Background="{StaticResource AccentAmberBrush}"
+                                    CornerRadius="10" Padding="10,4"
+                                    Margin="0,4,0,0" HorizontalAlignment="Left"
+                                    Visibility="Collapsed">
+                                <TextBlock Text="UPDATE AVAILABLE" FontSize="10"
+                                           FontWeight="Bold" Foreground="#05080E"/>
                             </Border>
                         </StackPanel>
 
-                        <!-- SESSION STATS -->
-                        <Border Grid.Row="2" Background="#0C121B" CornerRadius="20" Padding="20" BorderBrush="#11FFFFFF" BorderThickness="1">
+                        <!-- Session stats card -->
+                        <Border Grid.Row="2" Background="#0C121B" CornerRadius="20"
+                                Padding="20" BorderBrush="#11FFFFFF" BorderThickness="1">
                             <StackPanel>
                                 <Grid Margin="0,0,0,15">
                                     <StackPanel>
                                         <TextBlock Text="CORE STATUS" Style="{StaticResource MicroLabel}"/>
-                                        <TextBlock x:Name="StatusLabel" Text="OPTIMIZED" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentGreenBrush}"/>
+                                        <TextBlock x:Name="StatusLabel" Text="OPTIMIZED"
+                                                   FontWeight="Bold" FontSize="13"
+                                                   Foreground="{StaticResource AccentGreenBrush}"/>
                                     </StackPanel>
-                                    <Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="{StaticResource AccentGreenBrush}" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Ellipse x:Name="StatusDot" Width="10" Height="10"
+                                             Fill="{StaticResource AccentGreenBrush}"
+                                             HorizontalAlignment="Right" VerticalAlignment="Center">
                                         <Ellipse.Effect><BlurEffect Radius="4"/></Ellipse.Effect>
                                     </Ellipse>
                                 </Grid>
-                                
+
                                 <TextBlock Text="ÜBER CHARGE" Style="{StaticResource MicroLabel}"/>
                                 <Grid Height="6" Margin="0,5,0,10">
                                     <Border Background="#11FFFFFF" CornerRadius="3"/>
-                                    <ProgressBar x:Name="UberBar" Value="0" Minimum="0" Maximum="100" Background="Transparent" Foreground="{StaticResource AccentPurpleBrush}" BorderThickness="0">
+                                    <ProgressBar x:Name="UberBar" Value="0" Minimum="0" Maximum="100"
+                                                 Background="Transparent"
+                                                 Foreground="{StaticResource AccentPurpleBrush}"
+                                                 BorderThickness="0">
                                         <ProgressBar.Template>
                                             <ControlTemplate TargetType="ProgressBar">
                                                 <Grid>
                                                     <Border x:Name="PART_Track" Background="#11FFFFFF" CornerRadius="3"/>
-                                                    <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="3"/>
+                                                    <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                                            Background="{TemplateBinding Foreground}" CornerRadius="3"/>
                                                 </Grid>
                                             </ControlTemplate>
                                         </ProgressBar.Template>
                                     </ProgressBar>
                                 </Grid>
-                                <TextBlock x:Name="LatencyLabel" Text="LATENCY: 12ms" FontSize="10" Opacity="0.5" HorizontalAlignment="Right"/>
+                                <TextBlock x:Name="LatencyLabel" Text="LATENCY: --"
+                                           FontSize="10" Opacity="0.5" HorizontalAlignment="Right"/>
                             </StackPanel>
                         </Border>
                     </Grid>
                 </Border>
 
-                <!-- HEADER -->
-                <Grid Grid.Column="1" Height="60" Margin="0,15,30,0" MouseDown="TitleBar_MouseDown">
+                <!-- ═══ HEADER ════════════════════════════════════════════════ -->
+                <Grid Grid.Column="1" Height="60" Margin="0,15,30,0"
+                      MouseDown="TitleBar_MouseDown">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button x:Name="MinimizeBtn" Content="−" Width="40" Height="35" Style="{StaticResource GhostBtn}" Click="MinimizeBtn_Click" Margin="0,0,5,0"/>
-                        <Button x:Name="CloseBtn" Content="✕" Width="40" Height="35" Style="{StaticResource DangerBtn}" Click="CloseBtn_Click" />
+                        <Button x:Name="MinimizeBtn" Content="−" Width="40" Height="35"
+                                Style="{StaticResource GhostBtn}"
+                                Click="MinimizeBtn_Click" Margin="0,0,5,0"/>
+                        <Button x:Name="CloseBtn" Content="✕" Width="40" Height="35"
+                                Style="{StaticResource DangerBtn}"
+                                Click="CloseBtn_Click"/>
                     </StackPanel>
                 </Grid>
 
-                <!-- VIEW HOST -->
-                <ContentControl x:Name="ViewHost" Grid.Column="1" Grid.Row="1" Margin="30,0,30,30">
+                <!-- ═══ VIEW HOST ════════════════════════════════════════════ -->
+                <ContentControl x:Name="ViewHost"
+                                Grid.Column="1" Grid.Row="1"
+                                Margin="30,0,30,30">
                     <ContentControl.RenderTransform>
-                        <TranslateTransform />
+                        <TranslateTransform/>
                     </ContentControl.RenderTransform>
                 </ContentControl>
             </Grid>

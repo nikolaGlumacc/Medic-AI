@@ -1,0 +1,284 @@
+<UserControl x:Class="MedicAIGUI.Views.InspectorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Foreground="White"
+             Loaded="InspectorView_Loaded">
+
+    <UserControl.Resources>
+        <Style x:Key="ResultRowStyle" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Background"     Value="Transparent"/>
+            <Setter Property="Padding"        Value="0"/>
+            <Setter Property="Margin"         Value="0,0,0,6"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Reusable button template -->
+        <ControlTemplate x:Key="FlatBtnTpl" TargetType="Button">
+            <Border x:Name="Root"
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="10"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Root" Property="Opacity" Value="0.82"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.38"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+    </UserControl.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ═══ HEADER ══════════════════════════════════════════════════════ -->
+        <Grid Margin="0,0,0,20">
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="INSPECTOR PRO v5"
+                           FontSize="22" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Text="Rule-based automated UI testing. Press Run All Tests to begin."
+                           FontSize="11" FontWeight="SemiBold" Foreground="#8899AA"
+                           Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <WrapPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                <!-- Run All -->
+                <Button x:Name="RunAllBtn"
+                        Content="▶  Run All Tests"
+                        Width="155" Height="40"
+                        Background="#39D98A" Foreground="#05080E" FontWeight="Bold"
+                        BorderThickness="0" Margin="0,0,8,0"
+                        Template="{StaticResource FlatBtnTpl}"
+                        Click="RunAllBtn_Click"/>
+
+                <!-- Stop -->
+                <Button x:Name="StopBtn"
+                        Content="⏹  Stop"
+                        Width="100" Height="40"
+                        Background="#F2586B" Foreground="White" FontWeight="Bold"
+                        BorderThickness="0" IsEnabled="False" Margin="0,0,8,0"
+                        Template="{StaticResource FlatBtnTpl}"
+                        Click="StopBtn_Click"/>
+
+                <!-- Clear -->
+                <Button x:Name="ClearBtn"
+                        Content="🗑  Clear"
+                        Width="100" Height="40"
+                        Background="#1C2840" Foreground="White" FontWeight="Bold"
+                        BorderBrush="#33FFFFFF" BorderThickness="1" Margin="0,0,8,0"
+                        Template="{StaticResource FlatBtnTpl}"
+                        Click="ClearBtn_Click"/>
+
+                <!-- Extras -->
+                <Button x:Name="ExtrasBtn"
+                        Content="🔍  Extras"
+                        Width="105" Height="40"
+                        Background="#1C2840" Foreground="White" FontWeight="Bold"
+                        BorderBrush="#33FFFFFF" BorderThickness="1"
+                        Template="{StaticResource FlatBtnTpl}"
+                        Click="ExtrasBtn_Click"/>
+            </WrapPanel>
+        </Grid>
+
+        <!-- ═══ MAIN CONTENT ════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="420"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Results list -->
+            <Border Background="#101826" CornerRadius="18" Padding="20"
+                    Margin="0,0,14,0" BorderBrush="#15FFFFFF" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="TEST RESULTS"
+                               FontSize="12" FontWeight="Bold" Foreground="#8899AA"
+                               Margin="0,0,0,12"/>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ListBox x:Name="ResultsList"
+                                 Background="Transparent" BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource ResultRowStyle}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="Card"
+                                            Background="#0C121B" CornerRadius="12"
+                                            Padding="14,10" BorderThickness="1"
+                                            BorderBrush="#22FFFFFF">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="18"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Ellipse x:Name="Dot" Width="10" Height="10"
+                                                     Fill="#555E70" VerticalAlignment="Center"/>
+
+                                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontWeight="SemiBold" FontSize="13"
+                                                           Foreground="White"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock x:Name="DetailsText"
+                                                           Text="{Binding Details}" FontSize="10"
+                                                           Foreground="#8899AA" Margin="0,2,0,0"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding ElapsedMs, StringFormat={}{0} ms}"
+                                                       FontSize="10" Foreground="#555E70"
+                                                       VerticalAlignment="Top" Margin="8,0,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Status}" Value="Running">
+                                            <Setter TargetName="Dot"        Property="Fill"        Value="#FFB830"/>
+                                            <Setter TargetName="Card"       Property="Background"  Value="#1A160A"/>
+                                            <Setter TargetName="Card"       Property="BorderBrush" Value="#FFB830"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="Pass">
+                                            <Setter TargetName="Dot"        Property="Fill"        Value="#39D98A"/>
+                                            <Setter TargetName="Card"       Property="Background"  Value="#0A1810"/>
+                                            <Setter TargetName="Card"       Property="BorderBrush" Value="#39D98A"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="Fail">
+                                            <Setter TargetName="Dot"        Property="Fill"        Value="#F2586B"/>
+                                            <Setter TargetName="Card"       Property="Background"  Value="#180A0C"/>
+                                            <Setter TargetName="Card"       Property="BorderBrush" Value="#F2586B"/>
+                                            <Setter TargetName="DetailsText" Property="Foreground" Value="#F2586B"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Right: Live log -->
+            <Border Grid.Column="1" Background="#101826" CornerRadius="18" Padding="20"
+                    BorderBrush="#15FFFFFF" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Margin="0,0,0,12">
+                        <TextBlock Text="LIVE LOG" FontSize="12" FontWeight="Bold"
+                                   Foreground="#8899AA" VerticalAlignment="Center"
+                                   DockPanel.Dock="Left"/>
+                        <Button x:Name="CopyLogsBtn"
+                                Content="Copy" Width="66" Height="26"
+                                HorizontalAlignment="Right"
+                                Background="#1C2840" Foreground="White" FontSize="11"
+                                BorderBrush="#33FFFFFF" BorderThickness="1"
+                                DockPanel.Dock="Right"
+                                Click="CopyLogsBtn_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="6">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </DockPanel>
+
+                    <Border Grid.Row="1" Background="#0B111A" CornerRadius="12" Padding="14">
+                        <ScrollViewer x:Name="LogScroller"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="LogItems">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}"
+                                                   FontFamily="Consolas" FontSize="11"
+                                                   Foreground="#B0C4DE"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,1"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══ SUMMARY BAR ══════════════════════════════════════════════════ -->
+        <Border Grid.Row="2" Background="#0C121B" CornerRadius="12" Padding="20,12"
+                Margin="0,14,0,0" BorderBrush="#11FFFFFF" BorderThickness="1">
+            <Grid>
+                <!-- Left: counters + status -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,28,0">
+                        <TextBlock Text="TOTAL:" FontSize="11" FontWeight="Bold"
+                                   Foreground="#8899AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TotalLabel" Text="0" FontSize="16" FontWeight="Bold"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,28,0">
+                        <Ellipse Width="8" Height="8" Fill="#39D98A"
+                                 VerticalAlignment="Center" Margin="0,0,7,0"/>
+                        <TextBlock Text="PASSED:" FontSize="11" FontWeight="Bold"
+                                   Foreground="#8899AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="PassedLabel" Text="0" FontSize="16" FontWeight="Bold"
+                                   Foreground="#39D98A" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,28,0">
+                        <Ellipse Width="8" Height="8" Fill="#F2586B"
+                                 VerticalAlignment="Center" Margin="0,0,7,0"/>
+                        <TextBlock Text="FAILED:" FontSize="11" FontWeight="Bold"
+                                   Foreground="#8899AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="FailedLabel" Text="0" FontSize="16" FontWeight="Bold"
+                                   Foreground="#F2586B" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock x:Name="RunStatusLabel"
+                               Text="Idle — press Run All Tests to start."
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="#4ED9FF" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Right: bot health -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="BOT SERVICE:" FontSize="10" FontWeight="Bold"
+                               Foreground="#8899AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Ellipse x:Name="BotHealthDot" Width="8" Height="8"
+                             Fill="#555E70" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="BotHealthLabel" Text="Unknown"
+                               FontSize="10" FontWeight="SemiBold"
+                               Foreground="#555E70" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
