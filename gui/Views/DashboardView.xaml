@@ -36,7 +36,7 @@
                     <Button x:Name="SyncConfigBtn" Content="Sync Config" Width="110" Height="36" Margin="0,0,8,8" Click="SyncConfigBtn_Click"/>
                     <Button x:Name="FetchWeaponsBtn" Content="Fetch Weapons" Width="125" Height="36" Margin="0,0,8,8" Click="FetchWeaponsBtn_Click"/>
                     <Button x:Name="DebugSnapshotBtn" Content="Debug Snapshot" Width="125" Height="36" Margin="0,0,8,8" Click="DebugSnapshotBtn_Click" IsEnabled="False"/>
-                    <Button x:Name="ReconnectBtn" Content="Toggle Simulation" Width="140" Height="36" Click="SimulationBtn_Click"/>
+                    <Button x:Name="SimulationBtn" Content="SIMULATION MODE" Width="145" Height="36" Click="SimulationBtn_Click" Opacity="0.6"/>
                 </WrapPanel>
 
                 <TextBlock Text="Detected weapons" FontSize="12" Opacity="0.7"/>

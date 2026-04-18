@@ -10,10 +10,12 @@ namespace MedicAIGUI.Services
         public static void Log(string msg)
         {
             var line = $"[{DateTime.Now:HH:mm:ss}] {msg}";
-            Events.Add(line);
-
-            if (Events.Count > 800)
-                Events.RemoveAt(0);
+            System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                Events.Add(line);
+                if (Events.Count > 800)
+                    Events.RemoveAt(0);
+            });
         }
 
         public static void Clear() => Events.Clear();

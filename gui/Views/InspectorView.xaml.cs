@@ -8,7 +8,7 @@ namespace MedicAIGUI.Views
 {
     public partial class InspectorView : UserControl
     {
-        private readonly InspectorEngine            _engine = new();
+        private InspectorEngine            _engine => InspectorEngine.Instance;
         private System.Threading.CancellationTokenSource? _cts;
 
         public InspectorView()

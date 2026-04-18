@@ -22,9 +22,8 @@ namespace MedicAIGUI.Views
             _service.StatusUpdated += OnStatusUpdated;
             _service.LogReceived += OnLogReceived;
             _service.ConnectionChanged += OnConnectionChanged;
-            Loaded += async (s, e) => await _service.ConnectAsync();
-            Unloaded += (s, e) => _service.Disconnect();
-            UpdateButtonState(false);
+
+            UpdateButtonState(_service.IsConnected);
         }
 
         private void OnStatusUpdated(JObject status)
@@ -86,7 +85,14 @@ namespace MedicAIGUI.Views
                 foreach (var w in weapons) _weapons.Add(w);
             });
         }
-        private void SimulationBtn_Click(object sender, RoutedEventArgs e) { /* Toggle simulation stub */ }
+        private void SimulationBtn_Click(object sender, RoutedEventArgs e)
+        {
+            _service.ToggleSimulation();
+            var isSim = _service.IsSimulationMode;
+            SimulationBtn.Opacity = isSim ? 1.0 : 0.6;
+            SimulationBtn.Content = isSim ? "STOP SIMULATION" : "SIMULATION MODE";
+            SimulationBtn.Background = isSim ? (SolidColorBrush)FindResource("AccentCoolBrush") : (SolidColorBrush)FindResource("SurfaceLightBrush");
+        }
         private void DebugSnapshotBtn_Click(object sender, RoutedEventArgs e) => _service.DebugSnapshotAsync();
 
         // Log toolbar

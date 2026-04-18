@@ -210,42 +210,117 @@
                             <StackPanel Margin="20">
                                 <Expander Header="🔵 BLU Team" IsExpanded="True" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
                                     <StackPanel Margin="10">
-                                        <TextBlock Text="Hue Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
-                                            <TextBox x:Name="BluHMinBox" Text="{Binding BluHMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
-                                            <TextBlock Text="–" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="BluHMaxBox" Text="{Binding BluHMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
-                                        </StackPanel>
-                                        <TextBlock Text="Saturation Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
-                                            <TextBox x:Name="BluSMinBox" Text="{Binding BluSMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
-                                            <TextBlock Text="–" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="BluSMaxBox" Text="{Binding BluSMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
-                                        </StackPanel>
-                                        <TextBlock Text="Value Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
-                                            <TextBox x:Name="BluVMinBox" Text="{Binding BluVMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
-                                            <TextBlock Text="–" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="BluVMaxBox" Text="{Binding BluVMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
-                                        </StackPanel>
+                                        <Grid Margin="0,0,0,15">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Detection Range Preview" VerticalAlignment="Center" Opacity="0.7" FontSize="11" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Adjust sliders below to match the team color" FontSize="10" Opacity="0.5"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Width="100" Height="50" CornerRadius="10" Background="{Binding BluPreviewBrush}" BorderBrush="#30FFFFFF" BorderThickness="1">
+                                                <Border.Effect>
+                                                    <DropShadowEffect BlurRadius="20" Opacity="0.5" ShadowDepth="0" Color="#4ED9FF"/>
+                                                </Border.Effect>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Hue -->
+                                        <Grid Margin="0,5,0,5">
+                                            <TextBlock Text="Hue (Color Type)" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
+                                                <TextBlock Text="{Binding BluHMin}"/>
+                                                <TextBlock Text=" - "/>
+                                                <TextBlock Text="{Binding BluHMax}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Grid Height="30" Margin="0,0,0,5">
+                                            <Border CornerRadius="6">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                        <GradientStop Color="#FF0000" Offset="0.0"/>
+                                                        <GradientStop Color="#FFFF00" Offset="0.16"/>
+                                                        <GradientStop Color="#00FF00" Offset="0.33"/>
+                                                        <GradientStop Color="#00FFFF" Offset="0.5"/>
+                                                        <GradientStop Color="#0000FF" Offset="0.66"/>
+                                                        <GradientStop Color="#FF00FF" Offset="0.83"/>
+                                                        <GradientStop Color="#FF0000" Offset="1.0"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,15">
+                                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                                            <Slider Minimum="0" Maximum="179" Value="{Binding BluHMin, Mode=TwoWay}" ToolTip="Min Hue"/>
+                                            <Slider Grid.Row="1" Minimum="0" Maximum="179" Value="{Binding BluHMax, Mode=TwoWay}" ToolTip="Max Hue"/>
+                                        </Grid>
+
+                                        <!-- Saturation -->
+                                        <Grid Margin="0,5,0,5">
+                                            <TextBlock Text="Saturation (Intensity)" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
+                                                <TextBlock Text="{Binding BluSMin}"/>
+                                                <TextBlock Text=" - "/>
+                                                <TextBlock Text="{Binding BluSMax}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluSMin, Mode=TwoWay}" Margin="0,0,0,5"/>
+                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluSMax, Mode=TwoWay}" Margin="0,0,0,15"/>
+
+                                        <!-- Value -->
+                                        <Grid Margin="0,5,0,5">
+                                            <TextBlock Text="Value (Brightness)" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
+                                                <TextBlock Text="{Binding BluVMin}"/>
+                                                <TextBlock Text=" - "/>
+                                                <TextBlock Text="{Binding BluVMax}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluVMin, Mode=TwoWay}" Margin="0,0,0,5"/>
+                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluVMax, Mode=TwoWay}" Margin="0,0,0,5"/>
                                     </StackPanel>
                                 </Expander>
 
                                 <Expander Header="🔴 RED Team" IsExpanded="False" Foreground="#F2586B" FontWeight="Bold" Margin="0,0,0,10">
                                     <StackPanel Margin="10">
-                                        <TextBlock Text="Hue Low Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
-                                            <TextBox x:Name="Red1HMinBox" Text="{Binding Red1HMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
-                                            <TextBlock Text="–" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="Red1HMaxBox" Text="{Binding Red1HMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
-                                        </StackPanel>
-                                        <TextBlock Text="Hue High Range" FontWeight="SemiBold" Margin="0,5,0,0"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
-                                            <TextBox x:Name="Red2HMinBox" Text="{Binding Red2HMin, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,5,0"/>
-                                            <TextBlock Text="–" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="Red2HMaxBox" Text="{Binding Red2HMax, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="5,0,0,0"/>
-                                        </StackPanel>
-                                        <!-- Add Red Saturation/Value if desired (pattern same) -->
+                                        <Grid Margin="0,0,0,15">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Detection Range Preview" VerticalAlignment="Center" Opacity="0.7" FontSize="11" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Red typically requires two hue ranges (0-10 &amp; 170-180)" FontSize="10" Opacity="0.5"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Width="100" Height="50" CornerRadius="10" Background="{Binding RedPreviewBrush}" BorderBrush="#30FFFFFF" BorderThickness="1">
+                                                <Border.Effect>
+                                                    <DropShadowEffect BlurRadius="20" Opacity="0.5" ShadowDepth="0" Color="#F2586B"/>
+                                                </Border.Effect>
+                                            </Border>
+                                        </Grid>
+
+                                        <Grid Margin="0,5,0,0">
+                                            <TextBlock Text="Hue Range 1 (0-10ish)" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
+                                                <TextBlock Text="{Binding Red1HMin}"/>
+                                                <TextBlock Text=" - "/>
+                                                <TextBlock Text="{Binding Red1HMax}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Slider Minimum="0" Maximum="40" Value="{Binding Red1HMin, Mode=TwoWay}" Margin="0,0,0,5"/>
+                                        <Slider Minimum="0" Maximum="40" Value="{Binding Red1HMax, Mode=TwoWay}" Margin="0,0,0,15"/>
+
+                                        <Grid Margin="0,5,0,0">
+                                            <TextBlock Text="Hue Range 2 (170-179)" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
+                                                <TextBlock Text="{Binding Red2HMin}"/>
+                                                <TextBlock Text=" - "/>
+                                                <TextBlock Text="{Binding Red2HMax}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Slider Minimum="140" Maximum="179" Value="{Binding Red2HMin, Mode=TwoWay}" Margin="0,0,0,5"/>
+                                        <Slider Minimum="140" Maximum="179" Value="{Binding Red2HMax, Mode=TwoWay}" Margin="0,0,0,5"/>
                                     </StackPanel>
                                 </Expander>
                             </StackPanel>

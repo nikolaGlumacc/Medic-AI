@@ -768,6 +768,17 @@ class GameFlow:
         self.spawned = False
 
     def step(self, frame):
+        # SPEED CLIP: If we see we're already spawned at ANY point, go straight to ready
+        if self.vision.is_spawned(frame):
+            if not self.spawned:
+                self.continue_pressed = True
+                self.class_selected = True
+                self.spawned = True
+                logger.info("Direct spawn detected – bypassing flow.")
+                self.ctrl.press_key("2") # medigun
+                return "ready"
+            return None
+
         if not self.continue_pressed:
             if self.vision.detect_continue_button(frame):
                 logger.info("Continue detected – clicking")
@@ -778,8 +789,9 @@ class GameFlow:
             return None
 
         if self.continue_pressed and not self.class_selected:
+            # Maybe the menu is already open, or we need to press it
             self.ctrl.press_key("7")
-            logger.info("Selected Medic (7)")
+            logger.info("Selecting Medic (7)")
             self.class_selected = True
             return "spawning"
 
@@ -833,6 +845,7 @@ class MedicBot:
         self.last_target_time = 0.0
         self.last_time = time.time()
         self.priority_names = [p.lower() for p in CONFIG.get("priority_players", [])]
+        self.player_statuses: Dict[str, str] = {} # "name": "alive" / "dead"
         self._gameflow_ready = False
 
         # WebSocket / Flask
@@ -918,6 +931,36 @@ class MedicBot:
     def _tick(self, frame, snap):
         now = time.time()
         screen_cx, screen_cy = self.vision.w//2, self.vision.h//2
+
+        # TACTICAL CHECK: Is our priority dead?
+        priorities = [p.lower() for p in CONFIG.get("priority_players", [])]
+        priority_dead = False
+        for name, status in self.player_statuses.items():
+            if name.lower() in priorities and status == "dead":
+                priority_dead = True
+                break
+
+        if priority_dead:
+            if self.state != BotState.RETREATING:
+                logger.warning("PRIORITY DEAD - RETREATING")
+                self._broadcast_activity("Priority player dead — RETREATING!", audio=True)
+            self.state = BotState.RETREATING
+            self.ctrl.release_m1()
+            self.locked_track_id = None
+            self.ctrl.hold_key("s")
+            self.ctrl.release_key("w")
+            # Random strafe to avoid snipers while retreating
+            if random.random() < 0.1:
+                key = random.choice(["a","d"])
+                self.ctrl.hold_key(key)
+                time.sleep(0.05)
+                self.ctrl.release_key(key)
+            return
+
+        # If we were retreating but priority is no longer dead (respawned or off scoreboard)
+        if self.state == BotState.RETREATING and not priority_dead:
+            self.state = BotState.SEARCHING
+            self.ctrl.release_key("s")
 
         # Maintain lock
         locked_track = None
@@ -1052,10 +1095,11 @@ class MedicBot:
                 _keyboard.release(Key.tab)
                 names = self.vision.read_scoreboard_names(frame)
                 if names:
+                    self.player_statuses = names
                     priorities = [p.lower() for p in CONFIG["priority_players"]]
                     for name, status in names.items():
                         if name.lower() in priorities:
-                            logger.info(f"Scoreboard: {name} = {status}")
+                            logger.info(f"Priority Status: {name} = {status}")
 
     def _cpu_temp_loop(self):
         while self.running:
@@ -1122,6 +1166,13 @@ class MedicBot:
                     action = msg.get("action") or msg.get("type")
                     if action == "start": self.start()
                     elif action == "stop": self.stop()
+                    elif action == "test_input":
+                        logger.info("TEST_INPUT requested")
+                        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 10, 0, 0, 0)
+                        time.sleep(0.05)
+                        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -10, 0, 0, 0)
+                        if pydirectinput: pydirectinput.press('n')
+                        self._broadcast_activity("TEST_INPUT_SUCCESS")
                     elif action == "config":
                         CONFIG.update(msg.get("config", {}))
                         with open("bot_config.json","w") as f: json.dump(CONFIG,f,indent=4)
@@ -1132,7 +1183,7 @@ class MedicBot:
     # ──────────────────────────────────────────────────────────────────────────
     # FIXED: WebSocket binds to 127.0.0.1 to avoid Windows permission error
     # ──────────────────────────────────────────────────────────────────────────
-    def start_ws(self, host="127.0.0.1", port=None):
+    def start_ws(self, host="0.0.0.0", port=None):
         if port is None:
             port = CONFIG.get("ws_port", 8765)
         self._ws_loop = asyncio.new_event_loop()
@@ -1208,8 +1259,8 @@ class MedicBot:
 # ═══════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     bot = MedicBot()
-    # FIXED: Bind WebSocket to 127.0.0.1 to avoid Windows permission error
-    threading.Thread(target=lambda: bot.start_ws(host="127.0.0.1"), daemon=True).start()
+    # PRO TIP: Bind to 0.0.0.0 to allow connections from other IPs (Run as ADMIN if needed)
+    threading.Thread(target=lambda: bot.start_ws(host="0.0.0.0"), daemon=True).start()
     time.sleep(0.5)
     logger.info("Flask API on http://0.0.0.0:5000")
     bot.app.run(host="0.0.0.0", port=5000, threaded=True, debug=False, use_reloader=False)

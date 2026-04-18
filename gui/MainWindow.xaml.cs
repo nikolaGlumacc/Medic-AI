@@ -14,8 +14,9 @@ namespace MedicAIGUI
     {
         private readonly MedicBotService _service = MedicBotService.Instance;
         private SavedSettings _settings;
+        private readonly System.Collections.Generic.Dictionary<string, UserControl> _viewCache = new();
 
-        // 🔥 Inspector Pro v2 live event feed
+        // 🔥 Inspector Pro v5 live event feed
         public ObservableCollection<string> DebugEvents => DebugHub.Events;
 
         public MainWindow()
@@ -31,7 +32,11 @@ namespace MedicAIGUI
             ApplyTheme();
             _settings.PropertyChanged += (s, e) => ApplyTheme();
 
-            NavigateTo(new DashboardView());
+            NavigateTo(GetView<DashboardView>());
+
+            // 🔥 Global Bot Connection
+            DebugHub.Log("MAIN: Initializing global connection...");
+            Loaded += async (s, e) => await _service.ConnectAsync();
 
             // 🔥 Inspector startup log
             DebugHub.Log("APP STARTED");
@@ -78,16 +83,27 @@ namespace MedicAIGUI
 
             switch (name)
             {
-                case "DashboardBtn":  NavigateTo(new DashboardView());       break;
-                case "PriorityBtn":   NavigateTo(new PriorityPlayersView()); break;
-                case "SettingsBtn":   NavigateTo(new SettingsView());        break;
-                case "TuningBtn":     NavigateTo(new TuningView());          break;
-                case "MatrixBtn":     NavigateTo(new MatrixView());          break;
-                case "LoadoutBtn":    NavigateTo(new LoadoutView());         break;
-                case "InspectorBtn":  NavigateTo(new InspectorView());       break;
+                case "DashboardBtn":  NavigateTo(GetView<DashboardView>());       break;
+                case "PriorityBtn":   NavigateTo(GetView<PriorityPlayersView>()); break;
+                case "SettingsBtn":   NavigateTo(GetView<SettingsView>());        break;
+                case "TuningBtn":     NavigateTo(GetView<TuningView>());          break;
+                case "MatrixBtn":     NavigateTo(GetView<MatrixView>());          break;
+                case "LoadoutBtn":    NavigateTo(GetView<LoadoutView>());         break;
+                case "InspectorBtn":  NavigateTo(GetView<InspectorView>());       break;
             }
 
             DebugHub.Log($"BUTTON_CLICK: {name}");
+        }
+
+        private T GetView<T>() where T : UserControl, new()
+        {
+            string key = typeof(T).Name;
+            if (!_viewCache.TryGetValue(key, out var view))
+            {
+                view = new T();
+                _viewCache[key] = view;
+            }
+            return (T)view;
         }
 
         private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
@@ -116,6 +132,7 @@ namespace MedicAIGUI
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             _settings.SaveSettings();
+            _service.Disconnect();
             DebugHub.Log("SETTINGS_SAVED_ON_CLOSE");
         }
     }
