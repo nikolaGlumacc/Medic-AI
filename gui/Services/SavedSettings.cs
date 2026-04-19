@@ -130,6 +130,10 @@ namespace MedicAIGUI.Services
         [JsonPropertyName("vaccinator_overlay_x")] public double VaccinatorOverlayX { get; set; } = 0;
         [JsonPropertyName("vaccinator_overlay_y")] public double VaccinatorOverlayY { get; set; } = 0;
 
+        // Keybinds
+        [JsonPropertyName("vaccinator_cycle_key")] public string VaccinatorCycleKey { get; set; } = "R";
+        [JsonPropertyName("uber_keybind")] public string UberKeybind { get; set; } = "M2";
+
         // Loadout
         public string PrimaryWeapon { get; set; } = "Crusader's Crossbow";
         public string SecondaryWeapon { get; set; } = "Medi Gun";
@@ -214,6 +218,8 @@ namespace MedicAIGUI.Services
             VaccinatorOverlayY = other.VaccinatorOverlayY;
             StrafeRandomize = other.StrafeRandomize;
             IdleRotationSpeed = other.IdleRotationSpeed;
+            VaccinatorCycleKey = other.VaccinatorCycleKey;
+            UberKeybind = other.UberKeybind;
             PrimaryWeapon = other.PrimaryWeapon;
             SecondaryWeapon = other.SecondaryWeapon;
             MeleeWeapon = other.MeleeWeapon;

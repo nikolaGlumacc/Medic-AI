@@ -357,6 +357,9 @@ namespace MedicAIGUI.Services
         public async Task SendTestInputAsync() => await SendCommand("test_input");
         public async Task<List<string>> GetWeaponsAsync() => await GetAvailableWeapons();
 
+        public async Task SendCycleVaccinatorAsync() => await SendAsync(JsonSerializer.Serialize(new { type = "cycle_vaccinator" }));
+        public async Task SendPopUberAsync() => await SendAsync(JsonSerializer.Serialize(new { type = "pop_uber" }));
+
         public async Task SendPingAsync(long ts) => await SendAsync(JsonSerializer.Serialize(new { type = "ping", ts }));
         public async Task SendConfigSyncTestAsync(int value) => await SendAsync(JsonSerializer.Serialize(new { type = "config_sync_test", value }));
         public async Task SendHardwareDanceAsync() => await SendAsync(JsonSerializer.Serialize(new { type = "hardware_dance" }));

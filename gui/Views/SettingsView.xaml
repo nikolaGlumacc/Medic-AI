@@ -217,6 +217,35 @@
                                     <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=VacYSlider, StringFormat={}{0:0}}"/>
                                 </Grid>
                                 <Slider x:Name="VacYSlider" Minimum="0" Maximum="2000" Value="{Binding VaccinatorOverlayY, Mode=TwoWay}"/>
+
+                                <!-- KEYBIND SETTINGS -->
+                                <TextBlock Text="Keybinds" FontWeight="Bold" Foreground="#4ED9FF" Margin="0,20,0,10"/>
+                                
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Vaccinator Cycle Key" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Press this key to cycle resistance on both you and the bot" FontSize="10" Opacity="0.5"/>
+                                    </StackPanel>
+                                    <TextBox Grid.Column="1" x:Name="VacCycleKeyInput" Text="{Binding VaccinatorCycleKey, UpdateSourceTrigger=PropertyChanged}" 
+                                             VerticalAlignment="Center" TextAlignment="Center" FontWeight="Bold" FontSize="14"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Uber Keybind" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Key to pop uber (M2 = right-click, or any key like F)" FontSize="10" Opacity="0.5"/>
+                                    </StackPanel>
+                                    <TextBox Grid.Column="1" x:Name="UberKeybindInput" Text="{Binding UberKeybind, UpdateSourceTrigger=PropertyChanged}" 
+                                             VerticalAlignment="Center" TextAlignment="Center" FontWeight="Bold" FontSize="14"/>
+                                </Grid>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
