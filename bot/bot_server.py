@@ -942,7 +942,9 @@ class MedicBot:
                     # Only cycle if vaccinator is selected
                     # Note: We can check CONFIG to see if loadout is vaccinator
                     self.vaccinator_state = (self.vaccinator_state + 1) % 3
-                    res = self.resistances[self.vaccinator_state]
+                    res_base = self.resistances[self.vaccinator_state]
+                    team_suffix = "2" if self.team == "BLU" else "1"
+                    res = f"{res_base}{team_suffix}"
                     self._broadcast({"type": "vaccinator_resist", "resist": res})
             except: pass
 
