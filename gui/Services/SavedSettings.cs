@@ -122,11 +122,13 @@ namespace MedicAIGUI.Services
         [JsonPropertyName("max_tracked_players")] public int MaxTrackedPlayers { get; set; } = 8;
         [JsonPropertyName("power_class_weight")] public double PowerClassWeight { get; set; } = 0.5;
         [JsonPropertyName("spy_check_frequency")] public int SpyCheckFrequency { get; set; } = 8;
-        [JsonPropertyName("priority_players")] public List<string> PriorityList { get; set; } = new();
+        [JsonPropertyName("current_target")] public string CurrentTarget { get; set; } = "";
 
         // TuningView bindings (referenced in TuningView.xaml)
         [JsonPropertyName("strafe_randomize")] public bool StrafeRandomize { get; set; } = false;
         [JsonPropertyName("idle_rotation_speed")] public int IdleRotationSpeed { get; set; } = 18;
+        [JsonPropertyName("vaccinator_overlay_x")] public double VaccinatorOverlayX { get; set; } = 0;
+        [JsonPropertyName("vaccinator_overlay_y")] public double VaccinatorOverlayY { get; set; } = 0;
 
         // Loadout
         public string PrimaryWeapon { get; set; } = "Crusader's Crossbow";
@@ -207,7 +209,9 @@ namespace MedicAIGUI.Services
             MaxTrackedPlayers = other.MaxTrackedPlayers;
             PowerClassWeight = other.PowerClassWeight;
             SpyCheckFrequency = other.SpyCheckFrequency;
-            PriorityList = new List<string>(other.PriorityList);
+            CurrentTarget = other.CurrentTarget;
+            VaccinatorOverlayX = other.VaccinatorOverlayX;
+            VaccinatorOverlayY = other.VaccinatorOverlayY;
             StrafeRandomize = other.StrafeRandomize;
             IdleRotationSpeed = other.IdleRotationSpeed;
             PrimaryWeapon = other.PrimaryWeapon;

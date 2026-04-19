@@ -36,7 +36,10 @@ namespace MedicAIGUI
 
             // 🔥 Global Bot Connection
             DebugHub.Log("MAIN: Initializing global connection...");
-            Loaded += async (s, e) => await _service.ConnectAsync();
+            Loaded += async (s, e) => {
+                await _service.ConnectAsync();
+                MedicAIGUI.Views.VaccinatorOverlayWindow.Instance.Show();
+            };
 
             // 🔥 Inspector startup log
             DebugHub.Log("APP STARTED");

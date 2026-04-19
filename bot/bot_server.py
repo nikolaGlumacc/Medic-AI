@@ -45,7 +45,7 @@ except ImportError:
     pydirectinput = None
 
 try:
-    from pynput.keyboard import Key, Controller as KeyboardController
+    from pynput.keyboard import Key, Controller as KeyboardController, Listener
     _keyboard = KeyboardController()
 except ImportError:
     _keyboard = None
@@ -903,9 +903,13 @@ class MedicBot:
         self.lock_timer = 0.0
         self.last_target_time = 0.0
         self.last_time = time.time()
-        self.priority_names = [p.lower() for p in CONFIG.get("priority_players", [])]
+        self.target_name = CONFIG.get("current_target", "").lower()
         self.player_statuses: Dict[str, str] = {} # "name": "alive" / "dead"
         self._gameflow_ready = False
+
+        self.vaccinator_state = 0
+        self.resistances = ["ammo", "bomb", "fire"]
+        self.key_listener = None
 
         # WebSocket / Flask
         self._ws_clients = set()
@@ -931,8 +935,25 @@ class MedicBot:
         logger.info("MedicBot system initialized.")
         self._broadcast({"type": "activity", "msg": "Bot started.", "audio": False})
 
+        def on_press(key):
+            if not self.running: return False # stop listener
+            try:
+                if hasattr(key, 'char') and key.char and key.char.lower() == 'r':
+                    # Only cycle if vaccinator is selected
+                    # Note: We can check CONFIG to see if loadout is vaccinator
+                    self.vaccinator_state = (self.vaccinator_state + 1) % 3
+                    res = self.resistances[self.vaccinator_state]
+                    self._broadcast({"type": "vaccinator_resist", "resist": res})
+            except: pass
+
+        if Listener is not None:
+            self.key_listener = Listener(on_press=on_press)
+            self.key_listener.start()
+
     def stop(self):
         self.running = False
+        if hasattr(self, 'key_listener') and self.key_listener:
+            self.key_listener.stop()
         self.ctrl.cleanup()
         logger.info("MedicBot stopped.")
         self._broadcast({"type": "activity", "msg": "Bot stopped.", "audio": False})
@@ -998,18 +1019,19 @@ class MedicBot:
         now = time.time()
         screen_cx, screen_cy = self.vision.w//2, self.vision.h//2
 
-        # TACTICAL CHECK: Is our priority dead?
-        priorities = [p.lower() for p in CONFIG.get("priority_players", [])]
+        # TACTICAL CHECK: Is our target dead?
+        target = CONFIG.get("current_target", "").strip().lower()
         priority_dead = False
-        for name, status in self.player_statuses.items():
-            if name.lower() in priorities and status == "dead":
-                priority_dead = True
-                break
+        if target:
+            for name, status in self.player_statuses.items():
+                if name.lower() == target and status == "dead":
+                    priority_dead = True
+                    break
 
         if priority_dead:
             if self.state != BotState.RETREATING:
-                logger.warning("PRIORITY DEAD - RETREATING")
-                self._broadcast_activity("Priority player dead — RETREATING!", audio=True)
+                logger.warning("TARGET DEAD - RETREATING")
+                self._broadcast_activity("Target player dead — RETREATING!", audio=True)
             self.state = BotState.RETREATING
             self.ctrl.release_m1()
             self.locked_track_id = None
@@ -1023,7 +1045,7 @@ class MedicBot:
                 self.ctrl.release_key(key)
             return
 
-        # If we were retreating but priority is no longer dead (respawned or off scoreboard)
+        # If we were retreating but target is no longer dead (respawned or off scoreboard)
         if self.state == BotState.RETREATING and not priority_dead:
             self.state = BotState.SEARCHING
             self.ctrl.release_key("s")
@@ -1162,10 +1184,11 @@ class MedicBot:
                 names = self.vision.read_scoreboard_names(frame)
                 if names:
                     self.player_statuses = names
-                    priorities = [p.lower() for p in CONFIG["priority_players"]]
-                    for name, status in names.items():
-                        if name.lower() in priorities:
-                            logger.info(f"Priority Status: {name} = {status}")
+                    target = CONFIG.get("current_target", "").strip().lower()
+                    if target:
+                        for name, status in names.items():
+                            if name.lower() == target:
+                                logger.info(f"Target Status: {name} = {status}")
 
     def _cpu_temp_loop(self):
         while self.running:
@@ -1255,14 +1278,20 @@ class MedicBot:
                         self._broadcast_activity("SNAPSHOT_SUCCESS" if frame is not None else "SNAPSHOT_FAILED")
                     elif action == "hardware_dance":
                         logger.info("HARDWARE_DANCE requested")
-                        if pydirectinput:
-                            for key in ['w', 's', 'a', 'd']:
-                                pydirectinput.keyDown(key); time.sleep(0.05); pydirectinput.keyUp(key)
-                            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 200, 100, 0, 0); time.sleep(0.05)
-                            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -200, -100, 0, 0); time.sleep(0.05)
-                            pydirectinput.mouseDown(button='right'); time.sleep(0.05); pydirectinput.mouseUp(button='right')
-                            pydirectinput.mouseDown(button='left'); time.sleep(0.05); pydirectinput.mouseUp(button='left')
-                        self._broadcast_activity("HARDWARE_DANCE_SUCCESS")
+                        def _dance():
+                            try:
+                                if pydirectinput:
+                                    for key in ['w', 's', 'a', 'd']:
+                                        pydirectinput.keyDown(key); time.sleep(0.05); pydirectinput.keyUp(key)
+                                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 200, 100, 0, 0); time.sleep(0.05)
+                                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -200, -100, 0, 0); time.sleep(0.05)
+                                    pydirectinput.mouseDown(button='right'); time.sleep(0.05); pydirectinput.mouseUp(button='right')
+                                    pydirectinput.mouseDown(button='left'); time.sleep(0.05); pydirectinput.mouseUp(button='left')
+                                self._broadcast_activity("HARDWARE_DANCE_SUCCESS")
+                            except Exception as e:
+                                logger.error(f"Hardware dance error: {e}")
+                                self._broadcast_activity("HARDWARE_DANCE_FAILED")
+                        threading.Thread(target=_dance, daemon=True).start()
                 except: pass
         except: pass
         finally: self._ws_clients.discard(websocket)

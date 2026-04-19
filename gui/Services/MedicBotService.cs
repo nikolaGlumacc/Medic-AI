@@ -42,6 +42,7 @@ namespace MedicAIGUI.Services
         public event Action<string>? LogReceived;
         public event Action<long>? OnPong;
         public event Action<int>? OnConfigSyncAck;
+        public event Action<string>? OnVaccinatorResistChanged;
 
         public bool IsConnected => _ws?.State == WebSocketState.Open;
         public bool IsSimulationMode { get; private set; }
@@ -265,6 +266,11 @@ namespace MedicAIGUI.Services
                     else if (type == "config_sync_ack")
                     {
                         if (int.TryParse(message["value"]?.ToString(), out int val)) OnConfigSyncAck?.Invoke(val);
+                    }
+                    else if (type == "vaccinator_resist")
+                    {
+                        var resist = message["resist"]?.ToString();
+                        if (resist != null) OnVaccinatorResistChanged?.Invoke(resist);
                     }
                 }
             }

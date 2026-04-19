@@ -154,7 +154,7 @@
                             <RadioButton x:Name="DashboardBtn" Content="DASHBOARD"
                                          Style="{StaticResource NavItemStyle}"
                                          IsChecked="True" Checked="NavBtn_Checked"/>
-                            <RadioButton x:Name="PriorityBtn"  Content="PRIORITY &amp; PLAYERS"
+                            <RadioButton x:Name="PriorityBtn"  Content="TARGET PLAYER"
                                          Style="{StaticResource NavItemStyle}"
                                          Checked="NavBtn_Checked"/>
                             <RadioButton x:Name="SettingsBtn"  Content="SETTINGS"

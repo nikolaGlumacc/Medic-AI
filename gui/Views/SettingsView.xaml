@@ -199,7 +199,24 @@
 
                                 <CheckBox Content="Auto Uber" IsChecked="{Binding AutoUber, Mode=TwoWay}" Margin="0,10,0,0"/>
                                 <CheckBox Content="Prefer melee on retreat" IsChecked="{Binding PreferMeleeForRetreat, Mode=TwoWay}" Margin="0,10,0,0"/>
-                                <CheckBox Content="Follow enabled" IsChecked="{Binding FollowEnabled, Mode=TwoWay}" Margin="0,10,0,0"/>
+                                <CheckBox Content="Follow enabled" IsChecked="{Binding FollowEnabled, Mode=TwoWay}" Margin="0,10,0,10"/>
+
+                                <!-- VACCINATOR OVERLAY SETTINGS -->
+                                <TextBlock Text="Vaccinator Overlay Position" FontWeight="Bold" Foreground="#4ED9FF" Margin="0,15,0,10"/>
+                                <TextBlock Text="(Set to 0,0 for default center offset)" FontSize="10" Opacity="0.6" Margin="0,-5,0,10"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Overlay X Position (px)"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=VacXSlider, StringFormat={}{0:0}}"/>
+                                </Grid>
+                                <Slider x:Name="VacXSlider" Minimum="0" Maximum="3000" Value="{Binding VaccinatorOverlayX, Mode=TwoWay}"/>
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Overlay Y Position (px)"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=VacYSlider, StringFormat={}{0:0}}"/>
+                                </Grid>
+                                <Slider x:Name="VacYSlider" Minimum="0" Maximum="2000" Value="{Binding VaccinatorOverlayY, Mode=TwoWay}"/>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
