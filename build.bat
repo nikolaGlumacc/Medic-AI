@@ -1,188 +1,234 @@
 @echo off
 setlocal EnableDelayedExpansion
-title MedicAI Setup - Deep Integration
+title MedicAI Setup
 color 0A
 
 echo.
 echo ============================================================
-echo   MedicAI - Full Setup Script (Deep Integration)
-echo   Choose your setup mode:
-echo     [1] FULL BOT SETUP (Gaming Machine - Downloads Brain/OCR)
-echo     [2] REMOTE DASHBOARD ONLY (Laptop - Fast, Single Folder)
+echo   MedicAI - Setup Script
 echo ============================================================
 echo.
-set /p MODE="Select mode [1 or 2]: "
 
-if "%MODE%"=="2" (
-    echo [SYSTEM] Remote Dashboard Mode selected. Skipping heavy dependencies...
-    goto :GUI_ONLY
-)
-
-:: ── Check admin (Required for Full Setup) ──────────────────────
-
+:: ── Must be admin ─────────────────────────────────────────────
 net session >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo [ERROR] Please run this script as Administrator.
-    echo Right-click build.bat and choose "Run as administrator".
+    echo Right-click build.bat and select "Run as administrator".
     pause
     exit /b 1
 )
 
-:: ── Check internet ────────────────────────────────────────────
-ping -n 1 google.com >nul 2>&1
+:: ── Internet check ────────────────────────────────────────────
+ping -n 1 8.8.8.8 >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo [ERROR] No internet connection detected.
-    echo Please connect to the internet and try again.
     pause
     exit /b 1
 )
 
-:: ── Install VC++ Redistributable ────────────────────────────────
-echo.
-echo [0/7] Checking for Visual C++ Redistributable 2015-2022...
-reg query "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Version >nul 2>&1
+:: ── VC++ Redistributable ──────────────────────────────────────
+echo [1/7] Checking Visual C++ Redistributable...
+reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Version >nul 2>&1
 if %errorlevel% NEQ 0 (
-    echo [0/7] VC++ Redistributable not found. Downloading...
-    curl -L -o "%TEMP%\vc_redist.x64.exe" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-    echo Installing VC++ Redistributable (Quiet)...
+    echo       Downloading VC++ Redistributable...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile '$env:TEMP\vc_redist.x64.exe'"
     "%TEMP%\vc_redist.x64.exe" /quiet /norestart
-    echo VC++ Redistributable installed.
+    echo       VC++ Redistributable installed.
 ) else (
-    echo [0/7] VC++ Redistributable already installed.
+    echo       Already installed.
 )
 
-:: ── Check Python 3.11 ─────────────────────────────────────────
-set "PYTHON_CMD=python"
-python --version 2>&1 | findstr "3.11" >nul
-if %errorlevel% NEQ 0 (
-    echo [1/7] Python 3.11 not found on default 'python' command. Checking 'py' launcher...
-    py -3.11 --version >nul 2>&1
-    if %errorlevel% EQU 0 (
-        echo [1/7] Found Python 3.11 via 'py' launcher.
-        set "PYTHON_CMD=py -3.11"
-    ) else (
-        echo [1/7] Python 3.11 not found. Downloading Python 3.11...
-        curl -L -o "%TEMP%\python_installer.exe" "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
-        echo Installing Python 3.11.9 (Quiet Mode)...
-        "%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-        
-        :: Refresh PATH for current session
-        for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH=%%B"
-        set "PYTHON_CMD=python"
+:: ── Python 3.11 ───────────────────────────────────────────────
+echo [2/7] Checking Python 3.11...
+
+set "PYTHON_EXE="
+
+:: Check if venv already exists and works — skip all Python detection
+if exist "c:\medicai_venv\Scripts\python.exe" (
+    echo       Virtual environment already exists, skipping Python install.
+    set "PYTHON_EXE=c:\medicai_venv\Scripts\python.exe"
+    goto :VENV_DEPS
+)
+
+:: Try python command
+python --version >nul 2>&1
+if %errorlevel% EQU 0 (
+    for /f "tokens=2" %%V in ('python --version 2^>^&1') do set "PY_VER=%%V"
+    echo !PY_VER! | findstr "^3\.11" >nul
+    if !errorlevel! EQU 0 (
+        set "PYTHON_EXE=python"
+        echo       Found Python !PY_VER! on PATH.
+        goto :CREATE_VENV
     )
-) else (
-    echo [1/7] Python 3.11 already installed and default.
 )
 
-echo.
-echo [2/7] Preparing Virtual Environment...
-if not exist "c:\medicai_venv\Scripts\python.exe" (
-    echo Creating virtual environment at c:\medicai_venv using Python 3.11...
-    !PYTHON_CMD! -m venv c:\medicai_venv
+:: Try py launcher
+py -3.11 --version >nul 2>&1
+if %errorlevel% EQU 0 (
+    set "PYTHON_EXE=py -3.11"
+    echo       Found Python 3.11 via py launcher.
+    goto :CREATE_VENV
 )
+
+:: Download and install Python 3.11.9
+echo       Python 3.11 not found. Downloading...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe' -OutFile '$env:TEMP\python_installer.exe'"
+echo       Installing Python 3.11.9...
+"%TEMP%\python_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0 /norestart
+if %errorlevel% NEQ 0 (
+    echo [ERROR] Python installation failed.
+    pause
+    exit /b 1
+)
+
+:: Refresh PATH from registry after install
+for /f "skip=2 tokens=3*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%A %%B"
+for /f "skip=2 tokens=3*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%A %%B"
+set "PATH=%SYS_PATH%;%USR_PATH%;%PATH%"
+
+:: Verify installation worked
+python --version >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo [ERROR] Python installed but still not found on PATH.
+    echo         Please close this window, reopen as Administrator, and run build.bat again.
+    pause
+    exit /b 1
+)
+set "PYTHON_EXE=python"
+echo       Python 3.11.9 installed successfully.
+
+:CREATE_VENV
+echo [3/7] Creating virtual environment at c:\medicai_venv...
+%PYTHON_EXE% -m venv c:\medicai_venv
+if %errorlevel% NEQ 0 (
+    echo [ERROR] Failed to create virtual environment.
+    pause
+    exit /b 1
+)
+echo       Virtual environment created.
+
+:VENV_DEPS
+echo [4/7] Installing Python dependencies...
 c:\medicai_venv\Scripts\python.exe -m pip install --upgrade pip --quiet
 
-echo.
-echo [3/7] Installing Bot Dependencies...
-if exist "%~dp0requirements.txt" (
-    echo [INFO] Installing all dependencies from requirements.txt...
-    c:\medicai_venv\Scripts\pip install -r "%~dp0requirements.txt" --quiet
-) else if exist "%~dp0bot\requirements_minimal.txt" (
-    echo [INFO] requirements.txt not found. Using requirements_minimal.txt...
-    c:\medicai_venv\Scripts\pip install -r "%~dp0bot\requirements_minimal.txt" --quiet
-) else (
-    echo [WARN] No requirements file found. Falling back to manual install.
-    c:\medicai_venv\Scripts\pip install websockets pynput psutil mss opencv-contrib-python numpy pytesseract flask pywin32 pydirectinput scipy pyautogui keyboard pyttsx3 transformers --quiet
+:: Install only what the bot actually needs — no torch, no transformers
+c:\medicai_venv\Scripts\pip install ^
+    "websockets>=12.0" ^
+    "pynput>=1.7.0" ^
+    "psutil>=6.0.0" ^
+    "mss>=9.0.0" ^
+    "opencv-contrib-python>=4.8.0" ^
+    "numpy>=1.24.0" ^
+    "pytesseract>=0.3.10" ^
+    "flask>=3.0.0" ^
+    "pywin32>=306" ^
+    "pydirectinput>=1.0.4" ^
+    "scipy>=1.10.0" ^
+    --quiet
+
+if %errorlevel% NEQ 0 (
+    echo [ERROR] Dependency installation failed.
+    pause
+    exit /b 1
 )
 
-:: ── pywin32 DLL registration fix ──────────────────────────────
-echo Registering pywin32 DLLs...
+:: Register pywin32 DLLs (requires admin — already checked above)
+echo       Registering pywin32 DLLs...
 c:\medicai_venv\Scripts\python.exe c:\medicai_venv\Scripts\pywin32_postinstall.py -install >nul 2>&1
+echo       Dependencies installed.
 
-echo.
-echo [4/7] Checking Tesseract OCR...
+:: ── Tesseract OCR ─────────────────────────────────────────────
+echo [5/7] Checking Tesseract OCR...
 if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
-    echo Tesseract already installed.
+    echo       Already installed.
 ) else (
-    echo Tesseract not found. Downloading installer...
-    curl -L -o "%TEMP%\tesseract_installer.exe" "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.4.0.20240606.exe"
-    echo Installing Tesseract OCR (Silent)...
+    echo       Downloading Tesseract...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.4.0.20240606.exe' -OutFile '$env:TEMP\tesseract_installer.exe'"
     "%TEMP%\tesseract_installer.exe" /S
-    echo Tesseract installation initiated.
+    echo       Tesseract installed.
 )
 
-echo.
-echo [5/7] Checking .NET 10 (SDK & Desktop Runtime)...
-dotnet --list-runtimes | findstr "Microsoft.WindowsDesktop.App 10." >nul
-if %errorlevel% NEQ 0 (
-    echo .NET 10 Desktop Runtime not found. Installing via dotnet-install...
-    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0 -Runtime windowsdesktop"
+:: ── .NET 10 ───────────────────────────────────────────────────
+echo [6/7] Checking .NET 10...
+
+:: Check for desktop runtime first (what the WPF app needs)
+dotnet --list-runtimes 2>nul | findstr "Microsoft.WindowsDesktop.App 10." >nul
+if %errorlevel% EQU 0 (
+    echo       .NET 10 Desktop Runtime already installed.
+    goto :DOTNET_SDK_CHECK
 )
 
-dotnet --version | findstr "^10." >nul
-if %errorlevel% NEQ 0 (
-    echo .NET 10 SDK not found. Installing via dotnet-install...
-    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0"
-    
-    :: Refresh PATH for dotnet
-    set "PATH=%PATH%;%USERPROFILE%\.dotnet;%ProgramFiles%\dotnet"
-) else (
-    echo [5/7] .NET 10 is already correctly installed.
-    dotnet --version
+echo       Installing .NET 10 Desktop Runtime...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ^
+    $s = (Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1').Content; ^
+    &([scriptblock]::Create($s)) -Channel 10.0 -Runtime windowsdesktop -InstallDir '$env:ProgramFiles\dotnet'"
+
+:DOTNET_SDK_CHECK
+dotnet --version 2>nul | findstr "^10\." >nul
+if %errorlevel% EQU 0 (
+    echo       .NET 10 SDK already installed.
+    goto :DOTNET_DONE
 )
 
-echo Folders ready.
+echo       Installing .NET 10 SDK...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ^
+    $s = (Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1').Content; ^
+    &([scriptblock]::Create($s)) -Channel 10.0 -InstallDir '$env:ProgramFiles\dotnet'"
 
-:GUI_ONLY
-echo.
-echo [SYSTEM] Ensuring .NET 10 is available...
-dotnet --version >nul 2>&1
-if %errorlevel% NEQ 0 (
-    echo [INFO] .NET SDK not found. Installing minimal runtime for Dashboard...
-    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0 -Runtime windowsdesktop"
-    set "PATH=%PATH%;%USERPROFILE%\.dotnet;%ProgramFiles%\dotnet"
-)
+:: Refresh PATH so dotnet is visible in this session
+set "PATH=%ProgramFiles%\dotnet;%USERPROFILE%\.dotnet;%PATH%"
 
-echo.
+:DOTNET_DONE
+echo       .NET 10 ready.
 
- 
-echo.
-echo [6.5/7] Configuring Windows Firewall...
+:: ── Firewall rules ────────────────────────────────────────────
+echo [6.5/7] Configuring firewall...
 netsh advfirewall firewall show rule name="MedicAI Flask API" >nul 2>&1
 if %errorlevel% NEQ 0 (
-    echo [INFO] Adding Firewall exception for Flask API (Port 5000)...
     netsh advfirewall firewall add rule name="MedicAI Flask API" dir=in action=allow protocol=TCP localport=5000 >nul
 )
 netsh advfirewall firewall show rule name="MedicAI WebSocket" >nul 2>&1
 if %errorlevel% NEQ 0 (
-    echo [INFO] Adding Firewall exception for WebSocket (Port 8766)...
     netsh advfirewall firewall add rule name="MedicAI WebSocket" dir=in action=allow protocol=TCP localport=8766 >nul
 )
-echo Firewall configured.
+echo       Firewall rules set.
 
-
-echo.
-echo [7/7] Building GUI (optimized Release)...
-if exist "%~dp0gui\MedicAIGUI.csproj" (
-    dotnet publish "%~dp0gui\MedicAIGUI.csproj" -c Release -r win-x64 --self-contained true -o "%~dp0publish_gui" /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
-    if %errorLevel% NEQ 0 (
-        echo [ERROR] GUI build failed.
-    ) else (
-        echo GUI published to publish_gui/
-    )
-) else (
-    echo [ERROR] GUI project not found.
+:: ── Build GUI ─────────────────────────────────────────────────
+echo [7/7] Building GUI...
+if not exist "%~dp0gui\MedicAIGUI.csproj" (
+    echo [ERROR] gui\MedicAIGUI.csproj not found.
+    pause
+    exit /b 1
 )
+
+dotnet publish "%~dp0gui\MedicAIGUI.csproj" ^
+    -c Release ^
+    -r win-x64 ^
+    --self-contained true ^
+    -o "%~dp0publish_gui" ^
+    /p:PublishSingleFile=true ^
+    /p:IncludeNativeLibrariesForSelfExtract=true
+
+if %errorlevel% NEQ 0 (
+    echo [ERROR] GUI build failed. Check output above for details.
+    pause
+    exit /b 1
+)
+echo       GUI built to publish_gui\
+
+:: ── Create required bot folders ───────────────────────────────
+if not exist "%~dp0bot\templates" mkdir "%~dp0bot\templates"
+if not exist "%~dp0bot\weapons"   mkdir "%~dp0bot\weapons"
+echo       Bot resource folders ready.
 
 echo.
 echo ============================================================
 echo   Setup complete!
-echo.
-echo   To start the bot:
-echo     - Double-click start.bat
-echo.
-echo   Note: Ensure TF2 is running in Windowed/Borderless mode
-echo         (-windowed -noborder in launch options)
+echo   Run start_server.bat to start the bot brain.
+echo   Run start.bat to launch the GUI dashboard.
+echo   NOTE: TF2 must be running in windowed/borderless mode.
 echo ============================================================
 echo.
 pause

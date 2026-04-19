@@ -1,26 +1,38 @@
 @echo off
+setlocal EnableDelayedExpansion
 pushd "%~dp0"
-echo [SYSTEM] Performing Deep System Integration...
+title MedicAI Launcher
 
-:: ── Check for .NET 10 SDK ──────────────────────────────────────
-dotnet --version | findstr "^10." >nul
-if %errorlevel% NEQ 0 (
-    echo .NET 10 SDK not found. Installing via build.bat logic...
-    powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) -Channel 10.0"
-    set "PATH=%PATH%;%USERPROFILE%\.dotnet;%ProgramFiles%\dotnet"
+echo.
+echo ============================================================
+echo   MedicAI Launcher
+echo ============================================================
+
+:: ── Verify publish exists ─────────────────────────────────────
+if not exist "%~dp0publish_gui\MedicAIGUI.exe" (
+    echo [ERROR] GUI not built yet. Please run build.bat first.
+    pause
+    exit /b 1
 )
 
-:: ── Publish GUI (Release) ──────────────────────────────────────
-echo [SYSTEM] Bundling dependencies (Release)...
-dotnet publish gui\MedicAIGUI.csproj -c Release -r win-x64 --self-contained true -o publish_gui /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
-if %errorlevel% neq 0 (
-    echo [ERROR] Publish failed.
-    pause & exit /b 1
+:: ── Verify venv exists ────────────────────────────────────────
+if not exist "c:\medicai_venv\Scripts\python.exe" (
+    echo [ERROR] Python environment not set up. Please run build.bat first.
+    pause
+    exit /b 1
 )
 
-:: ── Launch GUI ─────────────────────────────────────────────────
-cd /d "%~dp0publish_gui"
-echo [SYSTEM] Launching Command Deck...
-start MedicAIGUI.exe
+:: ── Start bot server in its own window ───────────────────────
+echo [1/2] Starting bot server...
+start "MedicAI Bot Server" cmd /k "c:\medicai_venv\Scripts\python.exe "%~dp0bot\bot_server.py""
+
+:: ── Wait for server to initialize ────────────────────────────
+echo       Waiting for server to initialize...
+timeout /t 3 /nobreak >nul
+
+:: ── Launch GUI ───────────────────────────────────────────────
+echo [2/2] Launching MedicAI GUI...
+start "" "%~dp0publish_gui\MedicAIGUI.exe"
+
 popd
-exit /b
+exit /b 0

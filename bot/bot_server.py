@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 MedicAI Bot Server — FULL GUI COMPATIBILITY + ADVANCED TRACKING
-- All original BotState values preserved (SEARCHING, ACQUIRE, TRACKING, RECOVER, HEALING, etc.)
-- Flask + WebSocket API unchanged (C# GUI works as before)
-- Advanced tracking core: Hungarian + Mahalanobis + 6‑state Kalman + PID controller
+- All original BotState values preserved
+- Flask + WebSocket API unchanged
+- Advanced tracking: Hungarian + Mahalanobis + 6-state Kalman + PID
 - Full game flow: Continue button, class select (7), spawn detection, Medigun equip (2)
+- Vaccinator resistance broadcast fixed
 """
 
 import cv2
@@ -31,13 +32,11 @@ from flask import Flask, request, jsonify
 import asyncio
 import websockets
 
-# Optional OCR
 try:
     import pytesseract
 except ImportError:
     pytesseract = None
 
-# Input backends
 try:
     import pydirectinput
     pydirectinput.PAUSE = 0.0
@@ -52,7 +51,7 @@ except ImportError:
     Key = None
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  LOGGING SHUNT (Broadcasting to GUI)
+#  LOGGING SHUNT
 # ═══════════════════════════════════════════════════════════════════════════════
 class WebSocketLogHandler(logging.Handler):
     def __init__(self, bot_instance):
@@ -62,43 +61,31 @@ class WebSocketLogHandler(logging.Handler):
     def emit(self, record):
         try:
             msg = self.format(record)
-            # Use threading to avoid blocking the main logger
             threading.Thread(target=self.bot._broadcast_terminal, args=(msg,), daemon=True).start()
         except:
             pass
 
 import ctypes
-import os
 import sys
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  LAPTOP OPTIMIZATION: DPI Awareness & Process Priority
-# ──────────────────────────────────────────────────────────────────────────────
+# ── Laptop optimizations ──────────────────────────────────────────────────────
 def optimize_for_laptop():
-    # 1. DPI Awareness (Ensures mss/win32 mouse coords match actual pixels on scaled laptop screens)
     try:
-        # 2 = Per-Monitor DPI Aware (better for Win 10/11)
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         try:
             ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
-
-    # 2. Process Priority (Prevents power-throttling on laptops)
     try:
-        # HIGH_PRIORITY_CLASS = 0x00000080
         ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00000080)
     except Exception:
         pass
-
-    # 3. Disable QuickEdit Mode (Prevents bot from freezing when clicking inside the terminal)
     try:
         kernel32 = ctypes.windll.kernel32
-        hStdin = kernel32.GetStdHandle(-10) # STD_INPUT_HANDLE
+        hStdin = kernel32.GetStdHandle(-10)
         mode = ctypes.c_uint32()
         kernel32.GetConsoleMode(hStdin, ctypes.byref(mode))
-        # Remove ENABLE_QUICK_EDIT_MODE (0x0040) and ensure ENABLE_EXTENDED_FLAGS (0x0080) is on
         new_mode = (mode.value & ~0x0040) | 0x0080
         kernel32.SetConsoleMode(hStdin, new_mode)
     except Exception:
@@ -110,11 +97,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("MedicAI")
 
 DEFAULTS: Dict = {
-    # Connection
     "ws_port": 8766,
     "flask_port": 5000,
-
-    # Aim / mouse
     "mouse_speed": 0.7,
     "deadzone_px": 8,
     "max_move_px": 12,
@@ -123,37 +107,27 @@ DEFAULTS: Dict = {
     "pid_kp": 0.15,
     "pid_ki": 0.01,
     "pid_kd": 0.05,
-
-    # Follow / movement
     "follow_fwd_thresh": 180,
     "follow_back_thresh": 80,
     "follow_strafe_thresh": 100,
     "follow_enabled": True,
     "strafe_randomize": False,
     "backpedal_max_duration": 2.0,
-
-    # BLU HSV
     "blu_h_min": 95,  "blu_h_max": 125,
     "blu_s_min": 70,  "blu_s_max": 255,
     "blu_v_min": 80,  "blu_v_max": 255,
-
-    # RED HSV
     "red1_h_min": 0,  "red1_h_max": 8,
     "red1_s_min": 90, "red1_s_max": 255,
     "red1_v_min": 90, "red1_v_max": 255,
     "red2_h_min": 172, "red2_h_max": 179,
     "red2_s_min": 90,  "red2_s_max": 255,
     "red2_v_min": 90,  "red2_v_max": 255,
-
-    # Blob filters
     "min_area": 600,
     "max_area": 8000,
     "min_aspect": 1.2,
     "max_aspect": 4.5,
     "morph_open_kernel": 3,
     "morph_close_kernel": 5,
-
-    # Uber detection
     "uber_roi_left_pct": 72.0,
     "uber_roi_top_pct": 89.5,
     "uber_roi_width_pct": 10.0,
@@ -165,35 +139,23 @@ DEFAULTS: Dict = {
     "uber_scale_factor": 2.5,
     "uber_pop_threshold": 95.0,
     "auto_uber": True,
-
-    # Tracking
     "track_min_hits": 3,
     "track_max_lost": 5,
     "mahalanobis_gate": 5.991,
     "lock_duration": 2.0,
-
-    # Game flow
     "idle_rotation_speed": 18,
     "idle_rotate_delay": 0.5,
     "key_cooldown": 0.1,
     "spy_check_frequency": 8,
     "scoreboard_check_frequency": 30,
     "tab_hold_duration": 0.25,
-
-    # Priority / OCR
     "priority_players": [],
     "team": "auto",
     "tesseract_path": r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-
-    # Timing
     "capture_loop_interval": 0.005,
     "controller_loop_interval": 0.01,
-
-    # Misc
     "show_debug_window": False,
     "cpu_throttle_threshold": 85,
-
-    # Original keys (kept for compatibility)
     "smoothing": 0.12,
     "deadzone": 30,
     "horizontal_smoothing": 0.20,
@@ -240,12 +202,13 @@ DEFAULTS: Dict = {
     "max_blob_speed_px": 120,
     "acquire_timeout": 0.4,
     "recover_timeout": 1.5,
+    # Vaccinator / loadout
+    "secondary_weapon": "medigun",   # track what weapon is equipped
 }
 CONFIG: Dict = dict(DEFAULTS)
 
 def load_config():
     global CONFIG
-    # FIX: Ensure config is loaded from script's directory, not root
     config_path = os.path.join(os.path.dirname(__file__), "bot_config.json")
     if os.path.exists(config_path):
         with open(config_path) as f:
@@ -261,22 +224,22 @@ if os.path.exists(_tess_path) and pytesseract:
     pytesseract.pytesseract.tesseract_cmd = _tess_path
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  ENUMS & DATA CLASSES (original BotState preserved)
+#  ENUMS & DATA CLASSES
 # ═══════════════════════════════════════════════════════════════════════════════
 class BotState(Enum):
-    SEARCHING  = "SEARCHING"
-    ACQUIRE    = "ACQUIRE"
-    TRACKING   = "TRACKING"
-    RECOVER    = "RECOVER"
-    HEALING    = "HEALING"
-    FOLLOWING  = "FOLLOWING"
-    MELEE      = "MELEE"
-    RETREATING = "RETREATING"
-    PASSIVE    = "PASSIVE"
-    IDLE       = "IDLE"
-    WAITING    = "WAITING"           # internal only, mapped to IDLE for GUI
-    CLASS_SELECT = "CLASS_SELECT"    # internal only
-    SPAWNING   = "SPAWNING"          # internal only
+    SEARCHING    = "SEARCHING"
+    ACQUIRE      = "ACQUIRE"
+    TRACKING     = "TRACKING"
+    RECOVER      = "RECOVER"
+    HEALING      = "HEALING"
+    FOLLOWING    = "FOLLOWING"
+    MELEE        = "MELEE"
+    RETREATING   = "RETREATING"
+    PASSIVE      = "PASSIVE"
+    IDLE         = "IDLE"
+    WAITING      = "WAITING"
+    CLASS_SELECT = "CLASS_SELECT"
+    SPAWNING     = "SPAWNING"
 
 @dataclass
 class HudSnapshot:
@@ -293,8 +256,18 @@ class BlobResult:
     dist_to_center: float = 0.0
     score: float = 0.0
 
+# ── Vaccinator resistance constants ──────────────────────────────────────────
+VACCINATOR_RESISTANCES = ["bullet", "blast", "fire"]
+
+# Maps resistance index → display label and icon colour for the GUI
+RESISTANCE_DISPLAY = {
+    "bullet": {"label": "Bullet",  "color": "#FFD700"},
+    "blast":  {"label": "Blast",   "color": "#FF6B35"},
+    "fire":   {"label": "Fire",    "color": "#FF3333"},
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
-#  KALMAN FILTER (6‑STATE ADAPTIVE)
+#  KALMAN FILTER
 # ═══════════════════════════════════════════════════════════════════════════════
 class KalmanTracker:
     def __init__(self, dt, initial_x, initial_y):
@@ -316,7 +289,6 @@ class KalmanTracker:
         self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 1.0
         self.kf.errorCovPost = np.eye(6, dtype=np.float32)
         self.kf.statePost = np.array([[initial_x],[initial_y],[0],[0],[0],[0]], np.float32)
-        self.initialized = True
 
     def predict(self):
         return self.kf.predict()
@@ -341,7 +313,7 @@ class KalmanTracker:
         S = self.get_innovation_covariance()
         try:
             invS = np.linalg.inv(S)
-            return np.sqrt(innovation.T @ invS @ innovation)
+            return float(np.sqrt(innovation.T @ invS @ innovation))
         except:
             return 1e9
 
@@ -350,7 +322,7 @@ class KalmanTracker:
         self.kf.processNoiseCov = self.base_process_noise * scale
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  TARGET TRACKER (HUNGARIAN + MAHALANOBIS + LIFECYCLE)
+#  TARGET TRACKER
 # ═══════════════════════════════════════════════════════════════════════════════
 class TargetTracker:
     def __init__(self):
@@ -378,31 +350,26 @@ class TargetTracker:
                 kf = KalmanTracker(dt, det[0], det[1])
                 score = self._compute_detection_score(det[2], det[3])
                 self.tracks.append({
-                    'id': self.next_id,
-                    'kalman': kf,
-                    'cx': det[0], 'cy': det[1],
-                    'area': det[2],
-                    'score': score,
-                    'hits': 1, 'age': 1, 'lost': 0,
-                    'confidence': score,
-                    'locked': False
+                    'id': self.next_id, 'kalman': kf,
+                    'cx': det[0], 'cy': det[1], 'area': det[2],
+                    'score': score, 'hits': 1, 'age': 1, 'lost': 0,
+                    'confidence': score, 'locked': False
                 })
                 self.next_id += 1
             return
 
         cost_matrix = np.full((len(self.tracks), len(detections)), 1e9)
         for i, track in enumerate(self.tracks):
-            kf = track['kalman']
             for j, det in enumerate(detections):
                 z = np.array([[det[0]],[det[1]]])
-                mahal = kf.mahalanobis_distance(z)
+                mahal = track['kalman'].mahalanobis_distance(z)
                 if mahal < self.gate_threshold:
                     cost_matrix[i,j] = mahal - track['confidence'] * 2.0
 
         if len(self.tracks) > 0 and len(detections) > 0:
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
             matched_tracks, matched_dets = set(), set()
-            for r,c in zip(row_ind, col_ind):
+            for r, c in zip(row_ind, col_ind):
                 if cost_matrix[r,c] < 1e8:
                     track = self.tracks[r]
                     det = detections[c]
@@ -417,8 +384,7 @@ class TargetTracker:
 
             for i, track in enumerate(self.tracks):
                 if i not in matched_tracks:
-                    track['lost'] += 1
-                    track['age'] += 1
+                    track['lost'] += 1; track['age'] += 1
                     track['confidence'] *= 0.95
 
             self.tracks = [t for t in self.tracks if t['lost'] <= self.max_lost]
@@ -428,14 +394,10 @@ class TargetTracker:
                     kf = KalmanTracker(dt, det[0], det[1])
                     score = self._compute_detection_score(det[2], det[3])
                     self.tracks.append({
-                        'id': self.next_id,
-                        'kalman': kf,
-                        'cx': det[0], 'cy': det[1],
-                        'area': det[2],
-                        'score': score,
-                        'hits': 1, 'age': 1, 'lost': 0,
-                        'confidence': score,
-                        'locked': False
+                        'id': self.next_id, 'kalman': kf,
+                        'cx': det[0], 'cy': det[1], 'area': det[2],
+                        'score': score, 'hits': 1, 'age': 1, 'lost': 0,
+                        'confidence': score, 'locked': False
                     })
                     self.next_id += 1
 
@@ -466,7 +428,7 @@ class TargetTracker:
         return None
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  VISION (original methods + HUD blackout + Continue detection)
+#  VISION
 # ═══════════════════════════════════════════════════════════════════════════════
 class Vision:
     def __init__(self):
@@ -478,7 +440,6 @@ class Vision:
         tmpl_path = Path(__file__).parent / "templates" / "continue_button.png"
         if tmpl_path.exists():
             self._continue_tmpl = cv2.imread(str(tmpl_path))
-        self._prev_blob_positions: Dict[int, Tuple[int, int]] = {}
 
     def capture(self):
         img = np.array(self.sct.grab(self.mon))
@@ -505,8 +466,8 @@ class Vision:
             hi2 = np.array([CONFIG["red2_h_max"], CONFIG["red2_s_max"], CONFIG["red2_v_max"]])
             mask = cv2.inRange(hsv, lo1, hi1) | cv2.inRange(hsv, lo2, hi2)
         ok, ck = int(CONFIG["morph_open_kernel"]), int(CONFIG["morph_close_kernel"])
-        if ok>0: mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(ok,ok)))
-        if ck>0: mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(ck,ck)))
+        if ok > 0: mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(ok,ok)))
+        if ck > 0: mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(ck,ck)))
         return mask
 
     def find_blobs(self, frame):
@@ -515,47 +476,41 @@ class Vision:
         blobs = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < CONFIG["min_area"] or area > CONFIG["max_area"]:
-                continue
+            if area < CONFIG["min_area"] or area > CONFIG["max_area"]: continue
             x,y,bw,bh = cv2.boundingRect(cnt)
             aspect = bh / max(bw,1)
-            if aspect < CONFIG["min_aspect"] or aspect > CONFIG["max_aspect"]:
-                continue
+            if aspect < CONFIG["min_aspect"] or aspect > CONFIG["max_aspect"]: continue
             M = cv2.moments(cnt)
-            if M["m00"]==0: continue
+            if M["m00"] == 0: continue
             cx, cy = int(M["m10"]/M["m00"]), int(M["m01"]/M["m00"])
             blobs.append((cx, cy, area, aspect))
         return blobs
 
-    # Original find_best_target (kept for compatibility, but not used in new tracking)
     def find_best_target(self, frame) -> Optional[BlobResult]:
         blobs = self.find_blobs(frame)
-        if not blobs:
-            return None
-        # Simple scoring for GUI compatibility
-        best = max(blobs, key=lambda b: b[2])  # largest area
+        if not blobs: return None
+        best = max(blobs, key=lambda b: b[2])
         return BlobResult(cx=best[0], cy=best[1], area=best[2], dist_to_center=0, score=best[2])
 
     def detect_continue_button(self, frame):
         if self._continue_tmpl is None: return False
-        scales = [0.8,0.9,1.0,1.1,1.2]
-        for s in scales:
+        for s in [0.8, 0.9, 1.0, 1.1, 1.2]:
             tmpl = cv2.resize(self._continue_tmpl, (0,0), fx=s, fy=s)
-            if tmpl.shape[0]>frame.shape[0] or tmpl.shape[1]>frame.shape[1]: continue
+            if tmpl.shape[0] > frame.shape[0] or tmpl.shape[1] > frame.shape[1]: continue
             res = cv2.matchTemplate(frame, tmpl, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, _ = cv2.minMaxLoc(res)
             if max_val > 0.7: return True
         return False
 
     def is_spawned(self, frame):
-        h,w = frame.shape[:2]
+        h, w = frame.shape[:2]
         roi = frame[int(h*0.88):int(h*0.96), int(w*0.02):int(w*0.12)]
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         return np.mean(gray) > 50
 
     def read_name_at_crosshair(self, frame):
         if not self.ocr_ok: return ""
-        h,w = frame.shape[:2]
+        h, w = frame.shape[:2]
         roi = frame[int(h*0.50):int(h*0.60), int(w*0.35):int(w*0.65)]
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         _, thresh = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY)
@@ -565,10 +520,10 @@ class Vision:
             return ""
 
     def read_uber_charge(self, frame):
-        h,w = frame.shape[:2]
+        h, w = frame.shape[:2]
         x1 = int(w*0.72); y1 = int(h*0.895)
         x2 = x1+int(w*0.10); y2 = y1+int(h*0.03)
-        if x2<=x1 or y2<=y1: return 0.0
+        if x2 <= x1 or y2 <= y1: return 0.0
         roi = frame[y1:y2, x1:x2]
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         lo = np.array([85,30,210]); hi = np.array([135,255,255])
@@ -581,7 +536,7 @@ class Vision:
         snap.uber_charge = self.read_uber_charge(frame)
         if self.ocr_ok:
             try:
-                h,w = frame.shape[:2]
+                h, w = frame.shape[:2]
                 hp_roi = frame[int(h*0.88):int(h*0.96), int(w*0.02):int(w*0.12)]
                 gray = cv2.cvtColor(hp_roi, cv2.COLOR_BGR2GRAY)
                 _, thr = cv2.threshold(gray, 140, 255, cv2.THRESH_BINARY)
@@ -611,7 +566,7 @@ class Vision:
 
     def read_scoreboard_names(self, frame):
         if not self.ocr_ok: return {}
-        h,w = frame.shape[:2]
+        h, w = frame.shape[:2]
         roi = frame[int(h*0.15):int(h*0.90), int(w*0.15):int(w*0.85)]
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         _, bright = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
@@ -620,7 +575,7 @@ class Vision:
         results = {}
         try:
             alive = pytesseract.image_to_string(bright, config="--psm 6").strip()
-            dead = pytesseract.image_to_string(dim_only, config="--psm 6").strip()
+            dead  = pytesseract.image_to_string(dim_only, config="--psm 6").strip()
             for name in alive.splitlines():
                 name = name.strip()
                 if name: results[name] = "alive"
@@ -632,7 +587,7 @@ class Vision:
 
     def detect_own_team(self, frame=None):
         if frame is None: frame = self.capture()
-        h,w = frame.shape[:2]
+        h, w = frame.shape[:2]
         sample = frame[int(h*0.85):int(h*0.98), int(w*0.01):int(w*0.08)]
         hsv = cv2.cvtColor(sample, cv2.COLOR_BGR2HSV)
         blu = cv2.countNonZero(cv2.inRange(hsv, np.array([95,60,60]), np.array([130,255,255])))
@@ -640,7 +595,7 @@ class Vision:
         return "BLU" if blu >= red else "RED"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  CONTROLLER (PID + velocity feedforward + original methods)
+#  CONTROLLER
 # ═══════════════════════════════════════════════════════════════════════════════
 class Controller:
     def __init__(self):
@@ -651,8 +606,6 @@ class Controller:
         self.error_sum_y = 0.0
         self.last_error_x = 0.0
         self.last_error_y = 0.0
-        self.sdx = 0.0
-        self.sdy = 0.0
 
     def _game_focused(self):
         hwnd = win32gui.GetForegroundWindow()
@@ -671,11 +624,9 @@ class Controller:
         if dist < CONFIG["deadzone_px"]:
             self.error_sum_x *= 0.9; self.error_sum_y *= 0.9
             return
-
         Kp, Ki, Kd = CONFIG["pid_kp"], CONFIG["pid_ki"], CONFIG["pid_kd"]
-        self.error_sum_x += total_dx; self.error_sum_y += total_dy
-        self.error_sum_x = np.clip(self.error_sum_x, -50, 50)
-        self.error_sum_y = np.clip(self.error_sum_y, -50, 50)
+        self.error_sum_x = np.clip(self.error_sum_x + total_dx, -50, 50)
+        self.error_sum_y = np.clip(self.error_sum_y + total_dy, -50, 50)
         deriv_x = total_dx - self.last_error_x
         deriv_y = total_dy - self.last_error_y
         out_x = Kp*total_dx + Ki*self.error_sum_x + Kd*deriv_x
@@ -686,7 +637,7 @@ class Controller:
         self.last_error_x = total_dx; self.last_error_y = total_dy
 
     def aim_at_blob(self, blob: BlobResult, frame_shape):
-        h,w = frame_shape[:2]
+        h, w = frame_shape[:2]
         self.move_mouse(float(blob.cx - w//2), float(blob.cy - h//2))
 
     def aim_at_track(self, track, w, h):
@@ -712,7 +663,7 @@ class Controller:
     def press_key(self, key):
         if not self._game_focused(): return
         now = time.time()
-        if now - self.last_key_time.get(key,0) > self.key_cooldown:
+        if now - self.last_key_time.get(key, 0) > self.key_cooldown:
             if pydirectinput: pydirectinput.press(key)
             self.last_key_time[key] = now
 
@@ -731,10 +682,9 @@ class Controller:
         self.click(button="right")
 
     def flick_spy_check(self):
-        spd = 180
-        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, spd*10, 0, 0, 0)
+        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 1800, 0, 0, 0)
         time.sleep(0.08)
-        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -spd*10, 0, 0, 0)
+        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -1800, 0, 0, 0)
 
     def switch_weapon(self, slot):
         self.press_key(str(slot))
@@ -753,48 +703,54 @@ class Controller:
         for k in ("w","a","s","d"): self.release_key(k)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  LOADOUT MANAGER (unchanged)
+#  LOADOUT MANAGER
 # ═══════════════════════════════════════════════════════════════════════════════
 class LoadoutManager:
     WEAPONS_DIR = Path(__file__).parent / "weapons"
+
     def __init__(self, controller, vision):
         self._ctrl = controller; self._vision = vision
         self._templates = {}
         self._cancel_flag = threading.Event()
         self._ensure_weapons_dir()
         self._load_templates()
+
     def _ensure_weapons_dir(self):
-        if not self.WEAPONS_DIR.exists():
-            self.WEAPONS_DIR.mkdir(parents=True)
+        self.WEAPONS_DIR.mkdir(parents=True, exist_ok=True)
+
     def _load_templates(self):
         for png in self.WEAPONS_DIR.glob("*.png"):
             img = cv2.imread(str(png))
             if img is not None:
                 self._templates[png.stem.lower()] = img
+
     @property
     def available_weapons(self): return sorted(self._templates.keys())
+
     def _find_weapon_on_screen(self, frame, weapon_name):
         tmpl = self._templates.get(weapon_name.lower())
         if tmpl is None: return None
         best_val, best_loc = 0.0, None
-        for sf in [0.8,0.9,1.0,1.1]:
+        for sf in [0.8, 0.9, 1.0, 1.1]:
             scaled = cv2.resize(tmpl, (0,0), fx=sf, fy=sf)
             if scaled.shape[0]>frame.shape[0] or scaled.shape[1]>frame.shape[1]: continue
             res = cv2.matchTemplate(frame, scaled, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, max_loc = cv2.minMaxLoc(res)
             if max_val > best_val:
-                best_val = max_val; best_loc = (max_loc[0]+scaled.shape[1]//2, max_loc[1]+scaled.shape[0]//2)
-        return best_loc if best_val>=0.7 else None
+                best_val = max_val
+                best_loc = (max_loc[0]+scaled.shape[1]//2, max_loc[1]+scaled.shape[0]//2)
+        return best_loc if best_val >= 0.7 else None
+
     def equip(self, weapon_name, bot_ref=None):
         weapon_name = weapon_name.lower()
         if weapon_name not in self._templates: return False
         if bot_ref: bot_ref._equip_in_progress = True
         self._cancel_flag.clear()
-        deadline = time.time()+15
+        deadline = time.time() + 15
         ok = False
         try:
             self._ctrl.press_key("m"); time.sleep(0.35)
-            while time.time()<deadline and not self._cancel_flag.is_set():
+            while time.time() < deadline and not self._cancel_flag.is_set():
                 frame = self._vision.capture()
                 if self._find_weapon_on_screen(frame, weapon_name):
                     ok = True; break
@@ -812,12 +768,14 @@ class LoadoutManager:
         finally:
             if bot_ref: bot_ref._equip_in_progress = False
         return ok
+
     def equip_async(self, weapon_name, bot_ref=None):
-        threading.Thread(target=self.equip, args=(weapon_name,bot_ref), daemon=True).start()
+        threading.Thread(target=self.equip, args=(weapon_name, bot_ref), daemon=True).start()
+
     def cancel(self): self._cancel_flag.set()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  GAME FLOW (Continue, class select, spawn)
+#  GAME FLOW
 # ═══════════════════════════════════════════════════════════════════════════════
 class GameFlow:
     def __init__(self, vision, ctrl):
@@ -827,20 +785,19 @@ class GameFlow:
         self.spawned = False
 
     def step(self, frame):
-        # SPEED CLIP: If we see we're already spawned at ANY point, go straight to ready
         if self.vision.is_spawned(frame):
             if not self.spawned:
                 self.continue_pressed = True
                 self.class_selected = True
                 self.spawned = True
-                logger.info("Direct spawn detected – bypassing flow.")
-                self.ctrl.press_key("2") # medigun
+                logger.info("Direct spawn detected.")
+                self.ctrl.press_key("2")
                 return "ready"
             return None
 
         if not self.continue_pressed:
             if self.vision.detect_continue_button(frame):
-                logger.info("Continue detected – clicking")
+                logger.info("Continue detected — clicking")
                 win32api.SetCursorPos((self.vision.w//2, self.vision.h//2))
                 self.ctrl.click()
                 self.continue_pressed = True
@@ -848,7 +805,6 @@ class GameFlow:
             return None
 
         if self.continue_pressed and not self.class_selected:
-            # Maybe the menu is already open, or we need to press it
             self.ctrl.press_key("7")
             logger.info("Selecting Medic (7)")
             self.class_selected = True
@@ -858,14 +814,14 @@ class GameFlow:
             if self.vision.is_spawned(frame):
                 time.sleep(0.2)
                 self.ctrl.press_key("2")
-                logger.info("Spawned – equipped Medigun (2)")
+                logger.info("Spawned — equipped Medigun (2)")
                 self.spawned = True
                 return "ready"
             return "spawning"
         return None
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  MEDIC BOT (original state machine preserved, enhanced with tracking)
+#  MEDIC BOT
 # ═══════════════════════════════════════════════════════════════════════════════
 class MedicBot:
     def __init__(self):
@@ -873,79 +829,116 @@ class MedicBot:
         self.state = BotState.IDLE
         self.team = CONFIG.get("team", "auto")
 
-        self.vision = Vision()
-        self.ctrl = Controller()
-        self.tracker = TargetTracker()
+        self.vision   = Vision()
+        self.ctrl     = Controller()
+        self.tracker  = TargetTracker()
         self.gameflow = GameFlow(self.vision, self.ctrl)
-        self.loadout = LoadoutManager(self.ctrl, self.vision)
+        self.loadout  = LoadoutManager(self.ctrl, self.vision)
 
-        self.uber_pct = 0.0
-        self.my_health = None
+        self.uber_pct     = 0.0
+        self.my_health    = None
         self.current_target = None
-        self.session_start = time.time()
-        self.melee_kills = 0
+        self.session_start  = time.time()
+        self.melee_kills    = 0
 
         self._equip_in_progress = False
-        self._cpu_throttled = False
-        self._last_spy_check = 0.0
+        self._cpu_throttled     = False
+        self._last_spy_check    = 0.0
         self._last_scoreboard_check = 0.0
-        self._last_frame = None
-        self._search_since = 0.0
+        self._last_frame        = None
+        self._search_since      = 0.0
 
-        # Original state machine fields
         self.last_blob = None
         self.stable_target_frames = 0
         self._acquire_start = None
         self._recover_start = None
 
-        # New tracking fields
         self.locked_track_id = None
-        self.lock_timer = 0.0
+        self.lock_timer      = 0.0
         self.last_target_time = 0.0
-        self.last_time = time.time()
-        self.target_name = CONFIG.get("current_target", "").lower()
-        self.player_statuses: Dict[str, str] = {} # "name": "alive" / "dead"
+        self.last_time       = time.time()
+        self.target_name     = CONFIG.get("current_target", "").lower()
+        self.player_statuses: Dict[str, str] = {}
         self._gameflow_ready = False
 
-        self.vaccinator_state = 0
-        self.resistances = ["ammo", "bomb", "fire"]
+        # ── Vaccinator state ─────────────────────────────────────────────────
+        # 0 = bullet, 1 = blast, 2 = fire  (matches VACCINATOR_RESISTANCES)
+        self.vaccinator_resist_index = 0
+        self._secondary_is_vaccinator = False  # set when GUI sends config
+
         self.key_listener = None
 
-        # WebSocket / Flask
-        self._ws_clients = set()
-        self._ws_loop = None
+        # WebSocket event — lets the server thread signal when it's ready
+        self._ws_ready = threading.Event()
+        self._ws_clients: set = set()
+        self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
+
         self.app = Flask(__name__)
         self._register_routes()
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    def _is_vaccinator(self) -> bool:
+        weapon = CONFIG.get("secondary_weapon", "").lower()
+        return "vacc" in weapon
+
+    def _vaccinator_resist_name(self) -> str:
+        return VACCINATOR_RESISTANCES[self.vaccinator_resist_index % len(VACCINATOR_RESISTANCES)]
+
+    def _broadcast_vaccinator_state(self):
+        """
+        Sends full vaccinator status to the GUI.
+        Always sends — GUI decides whether to show the panel based on
+        the 'vaccinator_active' flag.
+        """
+        resist_name = self._vaccinator_resist_name()
+        display     = RESISTANCE_DISPLAY.get(resist_name, {})
+        self._broadcast({
+            "type":              "vaccinator_state",
+            "vaccinator_active": self._is_vaccinator(),
+            "resist_index":      self.vaccinator_resist_index,
+            "resist_name":       resist_name,
+            "resist_label":      display.get("label", resist_name.title()),
+            "resist_color":      display.get("color", "#FFFFFF"),
+            "all_resistances":   [
+                {
+                    "index": i,
+                    "name":  VACCINATOR_RESISTANCES[i],
+                    "label": RESISTANCE_DISPLAY[VACCINATOR_RESISTANCES[i]]["label"],
+                    "color": RESISTANCE_DISPLAY[VACCINATOR_RESISTANCES[i]]["color"],
+                    "active": i == self.vaccinator_resist_index,
+                }
+                for i in range(len(VACCINATOR_RESISTANCES))
+            ],
+        })
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def start(self):
         if self.running: return
         self.running = True
         self.session_start = time.time()
-        threading.Thread(target=self._capture_loop, daemon=True).start()
-        threading.Thread(target=self._brain_loop, daemon=True).start()
-        threading.Thread(target=self._cpu_temp_loop, daemon=True).start()
+        threading.Thread(target=self._capture_loop,    daemon=True).start()
+        threading.Thread(target=self._brain_loop,      daemon=True).start()
+        threading.Thread(target=self._cpu_temp_loop,   daemon=True).start()
         threading.Thread(target=self._scoreboard_loop, daemon=True).start()
-        # Initialize logger shunt
+
         self._ws_log_handler = WebSocketLogHandler(self)
         self._ws_log_handler.setLevel(logging.INFO)
         self._ws_log_handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(self._ws_log_handler)
-        
-        logger.info("MedicBot system initialized.")
+
+        logger.info("MedicBot started.")
         self._broadcast({"type": "activity", "msg": "Bot started.", "audio": False})
 
         def on_press(key):
-            if not self.running: return False # stop listener
+            if not self.running: return False
             try:
                 if hasattr(key, 'char') and key.char and key.char.lower() == 'r':
-                    # Only cycle if vaccinator is selected
-                    # Note: We can check CONFIG to see if loadout is vaccinator
-                    self.vaccinator_state = (self.vaccinator_state + 1) % 3
-                    res_base = self.resistances[self.vaccinator_state]
-                    team_suffix = "2" if self.team == "BLU" else "1"
-                    res = f"{res_base}{team_suffix}"
-                    self._broadcast({"type": "vaccinator_resist", "resist": res})
+                    if self._is_vaccinator():
+                        self.vaccinator_resist_index = (self.vaccinator_resist_index + 1) % len(VACCINATOR_RESISTANCES)
+                        resist = self._vaccinator_resist_name()
+                        logger.info(f"Vaccinator resistance → {resist}")
+                        self._broadcast_vaccinator_state()
+                        self._broadcast_activity(f"Vaccinator: {resist.title()} resistance active.")
             except: pass
 
         if Listener is not None:
@@ -954,7 +947,7 @@ class MedicBot:
 
     def stop(self):
         self.running = False
-        if hasattr(self, 'key_listener') and self.key_listener:
+        if self.key_listener:
             self.key_listener.stop()
         self.ctrl.cleanup()
         logger.info("MedicBot stopped.")
@@ -982,7 +975,6 @@ class MedicBot:
             if frame is None:
                 time.sleep(0.01); continue
 
-            # Game flow automation (Continue, class, spawn)
             flow_status = self.gameflow.step(frame)
             if flow_status == "class_select" and self.state != BotState.CLASS_SELECT:
                 self.state = BotState.CLASS_SELECT
@@ -992,7 +984,6 @@ class MedicBot:
                 self._gameflow_ready = True
                 self.state = BotState.SEARCHING
 
-            # Only run tracking after spawn
             if self._gameflow_ready and self.state not in (BotState.IDLE, BotState.CLASS_SELECT, BotState.SPAWNING):
                 snap = self.vision.read_hud_snapshot(frame)
                 self.uber_pct = snap.uber_charge
@@ -1007,7 +998,6 @@ class MedicBot:
 
                 self._tick(frame, snap)
 
-                # Spy check
                 if time.time() - self._last_spy_check >= CONFIG["spy_check_frequency"]:
                     self._last_spy_check = time.time()
                     self.ctrl.flick_spy_check()
@@ -1021,7 +1011,6 @@ class MedicBot:
         now = time.time()
         screen_cx, screen_cy = self.vision.w//2, self.vision.h//2
 
-        # TACTICAL CHECK: Is our target dead?
         target = CONFIG.get("current_target", "").strip().lower()
         priority_dead = False
         if target:
@@ -1032,41 +1021,34 @@ class MedicBot:
 
         if priority_dead:
             if self.state != BotState.RETREATING:
-                logger.warning("TARGET DEAD - RETREATING")
+                logger.warning("TARGET DEAD — RETREATING")
                 self._broadcast_activity("Target player dead — RETREATING!", audio=True)
             self.state = BotState.RETREATING
             self.ctrl.release_m1()
             self.locked_track_id = None
             self.ctrl.hold_key("s")
             self.ctrl.release_key("w")
-            # Random strafe to avoid snipers while retreating
             if random.random() < 0.1:
                 key = random.choice(["a","d"])
-                self.ctrl.hold_key(key)
-                time.sleep(0.05)
-                self.ctrl.release_key(key)
+                self.ctrl.hold_key(key); time.sleep(0.05); self.ctrl.release_key(key)
             return
 
-        # If we were retreating but target is no longer dead (respawned or off scoreboard)
         if self.state == BotState.RETREATING and not priority_dead:
             self.state = BotState.SEARCHING
             self.ctrl.release_key("s")
 
-        # Maintain lock
         locked_track = None
         if self.locked_track_id is not None:
             locked_track = self.tracker.get_locked_track()
             if locked_track is None and now - self.lock_timer < CONFIG["lock_duration"]:
-                self.ctrl.release_m1()
-                self._stop_movement()
-                self.state = BotState.RECOVER if self.state == BotState.TRACKING else self.state
+                self.ctrl.release_m1(); self._stop_movement()
+                if self.state == BotState.TRACKING: self.state = BotState.RECOVER
                 return
             elif locked_track is None:
                 self.locked_track_id = None
                 self.state = BotState.SEARCHING
                 return
 
-        # TRACKING / HEALING state (with lock)
         if self.state in (BotState.TRACKING, BotState.HEALING, BotState.FOLLOWING):
             if locked_track:
                 self.ctrl.aim_at_track(locked_track, self.vision.w, self.vision.h)
@@ -1074,7 +1056,6 @@ class MedicBot:
                 self._follow(locked_track)
                 self.lock_timer = now
                 self.state = BotState.TRACKING
-                # OCR name for GUI
                 name = self.vision.read_name_at_crosshair(frame).strip()
                 self.current_target = name or "unknown"
                 if self.uber_pct >= CONFIG["uber_pop_threshold"] and CONFIG["auto_uber"]:
@@ -1087,7 +1068,6 @@ class MedicBot:
                 self._broadcast_activity("Target lost — recovering.")
             return
 
-        # RECOVER state
         if self.state == BotState.RECOVER:
             best_track = self.tracker.get_best_target(screen_cx, screen_cy, CONFIG["max_dist"])
             if best_track:
@@ -1103,7 +1083,6 @@ class MedicBot:
                     self._broadcast_activity("Recovery timed out — searching.")
             return
 
-        # SEARCHING / ACQUIRE states
         if self.state in (BotState.SEARCHING, BotState.ACQUIRE):
             best_track = self.tracker.get_best_target(screen_cx, screen_cy, CONFIG["max_dist"])
             if best_track:
@@ -1112,7 +1091,7 @@ class MedicBot:
                     self._acquire_start = now
                     self.stable_target_frames = 1
                     self._broadcast_activity("Candidate found — acquiring.")
-                else:  # ACQUIRE
+                else:
                     self.stable_target_frames += 1
                     if self.stable_target_frames >= CONFIG["stable_frames_required"]:
                         self.locked_track_id = best_track['id']
@@ -1156,28 +1135,10 @@ class MedicBot:
     def _stop_movement(self):
         for k in ("w","a","s","d"): self.ctrl.release_key(k)
 
-    # Original search behaviour (medic bubble)
-    def _search(self, frame):
-        if self._search_since == 0:
-            self._search_since = time.time()
-        elif time.time() - self._search_since > 15:
-            self._search_since = 0
-            self.ctrl.press_key("w")
-            return
-        bubble = self.vision.find_medic_bubble(frame)
-        if bubble:
-            bx, by = bubble
-            dx = bx - self.vision.w//2
-            self.ctrl.move_mouse(float(dx)*0.3, 0.0)
-            self.ctrl.hold_key("w")
-        else:
-            self.ctrl.move_mouse(CONFIG["idle_rotation_speed"], 0.0)
-
     def _scoreboard_loop(self):
         while self.running:
             time.sleep(CONFIG["scoreboard_check_frequency"])
             if not self.running: break
-            self._last_scoreboard_check = time.time()
             if _keyboard:
                 _keyboard.press(Key.tab)
                 time.sleep(CONFIG["tab_hold_duration"])
@@ -1186,11 +1147,6 @@ class MedicBot:
                 names = self.vision.read_scoreboard_names(frame)
                 if names:
                     self.player_statuses = names
-                    target = CONFIG.get("current_target", "").strip().lower()
-                    if target:
-                        for name, status in names.items():
-                            if name.lower() == target:
-                                logger.info(f"Target Status: {name} = {status}")
 
     def _cpu_temp_loop(self):
         while self.running:
@@ -1210,10 +1166,13 @@ class MedicBot:
         CONFIG["team"] = team
         return team
 
-    # ── WebSocket / Flask (unchanged) ────────────────────────────────────────
+    # ── Broadcasting ──────────────────────────────────────────────────────────
     def _broadcast(self, payload):
         if not self._ws_loop or not self._ws_clients: return
         asyncio.run_coroutine_threadsafe(self._ws_send_all(json.dumps(payload)), self._ws_loop)
+
+    def _broadcast_terminal(self, msg):
+        self._broadcast({"type": "terminal", "msg": msg})
 
     async def _ws_send_all(self, msg):
         dead = set()
@@ -1226,94 +1185,138 @@ class MedicBot:
         self._broadcast({"type": "activity", "msg": msg, "audio": audio})
 
     def _broadcast_status(self):
-        # Map internal states to original BotState values for GUI
         gui_state = self.state
-        if self.state == BotState.WAITING:
+        if self.state in (BotState.WAITING, BotState.CLASS_SELECT, BotState.SPAWNING):
             gui_state = BotState.IDLE
-        elif self.state == BotState.CLASS_SELECT:
-            gui_state = BotState.IDLE
-        elif self.state == BotState.SPAWNING:
-            gui_state = BotState.IDLE
-
         self._broadcast({
-            "type": "status",
-            "running": self.running,
-            "state": gui_state.value,
-            "uber": self.uber_pct,
-            "my_health": self.my_health,
+            "type":          "status",
+            "running":       self.running,
+            "state":         gui_state.value,
+            "uber":          self.uber_pct,
+            "my_health":     self.my_health,
             "current_target": self.current_target,
             "stable_frames": self.stable_target_frames,
             "last_blob_score": self.last_blob.score if self.last_blob else 0,
             "session_seconds": int(time.time() - self.session_start),
-            "melee_kills": self.melee_kills,
+            "melee_kills":   self.melee_kills,
+            # Include vaccinator state inside every status packet too
+            # so the GUI always has it without needing a separate handler
+            "vaccinator_active":  self._is_vaccinator(),
+            "vaccinator_resist":  self._vaccinator_resist_name(),
+            "vaccinator_resist_label": RESISTANCE_DISPLAY.get(
+                self._vaccinator_resist_name(), {}).get("label", ""),
+            "vaccinator_resist_color": RESISTANCE_DISPLAY.get(
+                self._vaccinator_resist_name(), {}).get("color", "#FFFFFF"),
         })
 
+    # ── WebSocket handler ─────────────────────────────────────────────────────
     async def _ws_handler(self, websocket):
         self._ws_clients.add(websocket)
+        # Send vaccinator state immediately on connect so GUI initialises correctly
+        await websocket.send(json.dumps({
+            "type": "vaccinator_state",
+            "vaccinator_active": self._is_vaccinator(),
+            "resist_index":  self.vaccinator_resist_index,
+            "resist_name":   self._vaccinator_resist_name(),
+            "resist_label":  RESISTANCE_DISPLAY.get(self._vaccinator_resist_name(), {}).get("label", ""),
+            "resist_color":  RESISTANCE_DISPLAY.get(self._vaccinator_resist_name(), {}).get("color", "#FFFFFF"),
+            "all_resistances": [
+                {
+                    "index": i,
+                    "name":  VACCINATOR_RESISTANCES[i],
+                    "label": RESISTANCE_DISPLAY[VACCINATOR_RESISTANCES[i]]["label"],
+                    "color": RESISTANCE_DISPLAY[VACCINATOR_RESISTANCES[i]]["color"],
+                    "active": i == self.vaccinator_resist_index,
+                }
+                for i in range(len(VACCINATOR_RESISTANCES))
+            ],
+        }))
         try:
             async for raw in websocket:
                 try:
                     msg = json.loads(raw)
                     action = msg.get("action") or msg.get("type")
+
                     if action == "start":
                         self._gameflow_ready = True
                         self.start()
-                    elif action == "stop": self.stop()
+                    elif action == "stop":
+                        self.stop()
+                    elif action == "config":
+                        data = msg.get("config", {})
+                        CONFIG.update(data)
+                        # If secondary_weapon changed, re-evaluate vaccinator mode
+                        if "secondary_weapon" in data or "SecondaryWeapon" in data:
+                            weapon = data.get("secondary_weapon") or data.get("SecondaryWeapon", "")
+                            CONFIG["secondary_weapon"] = weapon.lower()
+                            self._broadcast_vaccinator_state()
+                        config_path = os.path.join(os.path.dirname(__file__), "bot_config.json")
+                        with open(config_path, "w") as f: json.dump(CONFIG, f, indent=4)
+                    elif action == "set_vaccinator_resist":
+                        # GUI can also set resistance directly (e.g. from a dropdown)
+                        idx = int(msg.get("index", 0))
+                        self.vaccinator_resist_index = idx % len(VACCINATOR_RESISTANCES)
+                        self._broadcast_vaccinator_state()
+                        self._broadcast_activity(
+                            f"Vaccinator: {self._vaccinator_resist_name().title()} resistance set.")
+                    elif action == "ping":
+                        await websocket.send(json.dumps({"type": "pong", "ts": msg.get("ts")}))
                     elif action == "test_input":
-                        logger.info("TEST_INPUT requested")
                         win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 10, 0, 0, 0)
                         time.sleep(0.05)
                         win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -10, 0, 0, 0)
                         if pydirectinput: pydirectinput.press('n')
                         self._broadcast_activity("TEST_INPUT_SUCCESS")
-                    elif action == "config":
-                        data = msg.get("config", {})
-                        CONFIG.update(data)
-                        config_path = os.path.join(os.path.dirname(__file__), "bot_config.json")
-                        with open(config_path,"w") as f: json.dump(CONFIG,f,indent=4)
-                    elif action == "ping":
-                        await websocket.send(json.dumps({"type": "pong", "ts": msg.get("ts")}))
-                    elif action == "config_sync_test":
-                        await websocket.send(json.dumps({"type": "config_sync_ack", "value": msg.get("value")}))
                     elif action == "debug_snapshot":
                         frame = self.vision.capture()
                         self._broadcast_activity("SNAPSHOT_SUCCESS" if frame is not None else "SNAPSHOT_FAILED")
                     elif action == "hardware_dance":
-                        logger.info("HARDWARE_DANCE requested")
                         def _dance():
                             try:
                                 if pydirectinput:
-                                    for key in ['w', 's', 'a', 'd']:
+                                    for key in ['w','s','a','d']:
                                         pydirectinput.keyDown(key); time.sleep(0.05); pydirectinput.keyUp(key)
-                                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 200, 100, 0, 0); time.sleep(0.05)
-                                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -200, -100, 0, 0); time.sleep(0.05)
+                                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE,  200, 100, 0, 0); time.sleep(0.05)
+                                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, -200,-100, 0, 0); time.sleep(0.05)
                                     pydirectinput.mouseDown(button='right'); time.sleep(0.05); pydirectinput.mouseUp(button='right')
-                                    pydirectinput.mouseDown(button='left'); time.sleep(0.05); pydirectinput.mouseUp(button='left')
+                                    pydirectinput.mouseDown(button='left');  time.sleep(0.05); pydirectinput.mouseUp(button='left')
                                 self._broadcast_activity("HARDWARE_DANCE_SUCCESS")
                             except Exception as e:
-                                logger.error(f"Hardware dance error: {e}")
                                 self._broadcast_activity("HARDWARE_DANCE_FAILED")
                         threading.Thread(target=_dance, daemon=True).start()
-                except: pass
-        except: pass
-        finally: self._ws_clients.discard(websocket)
+                    elif action == "config_sync_test":
+                        await websocket.send(json.dumps({"type": "config_sync_ack", "value": msg.get("value")}))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            self._ws_clients.discard(websocket)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # FIXED: WebSocket binds to 127.0.0.1 to avoid Windows permission error
-    # ──────────────────────────────────────────────────────────────────────────
+    # ── WebSocket server startup (with ready event) ───────────────────────────
     def start_ws(self, host="0.0.0.0", port=None):
         if port is None:
-            port = CONFIG.get("ws_port", 8765)
+            port = CONFIG.get("ws_port", 8766)
+
         self._ws_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._ws_loop)
+
         async def serve():
             async with websockets.serve(self._ws_handler, host, port):
-                logger.info(f"WebSocket server on ws://{host}:{port}")
+                logger.info(f"WebSocket server ready on ws://{host}:{port}")
+                self._ws_ready.set()   # ← signal that the server is actually listening
                 await asyncio.Future()
+
         self._ws_loop.run_until_complete(serve())
 
+    def wait_until_ws_ready(self, timeout=10.0) -> bool:
+        """Block the calling thread until the WebSocket server is accepting connections."""
+        return self._ws_ready.wait(timeout=timeout)
+
+    # ── Flask routes ──────────────────────────────────────────────────────────
     def _register_routes(self):
         app = self.app
+
         @app.route("/status")
         def status():
             gui_state = self.state
@@ -1327,49 +1330,70 @@ class MedicBot:
                 "last_blob_score": self.last_blob.score if self.last_blob else 0,
                 "session_seconds": int(time.time() - self.session_start),
                 "melee_kills": self.melee_kills, "team": self.team,
+                "vaccinator_active": self._is_vaccinator(),
+                "vaccinator_resist": self._vaccinator_resist_name(),
             })
-        @app.route("/start", methods=["POST"])
-        def start(): self.start(); return jsonify({"status":"started"})
-        @app.route("/stop", methods=["POST"])
-        def stop(): self.stop(); return jsonify({"status":"stopped"})
+
+        @app.route("/start",  methods=["POST"])
+        def start():  self.start();  return jsonify({"status": "started"})
+
+        @app.route("/stop",   methods=["POST"])
+        def stop():   self.stop();   return jsonify({"status": "stopped"})
+
         @app.route("/config", methods=["GET","POST"])
         def config():
             if request.method == "POST":
-                data = request.get_json(force=True,silent=True) or {}
+                data = request.get_json(force=True, silent=True) or {}
                 CONFIG.update(data)
-                with open("bot_config.json","w") as f: json.dump(CONFIG,f,indent=4)
+                if "secondary_weapon" in data:
+                    CONFIG["secondary_weapon"] = data["secondary_weapon"].lower()
+                config_path = os.path.join(os.path.dirname(__file__), "bot_config.json")
+                with open(config_path, "w") as f: json.dump(CONFIG, f, indent=4)
             return jsonify(CONFIG)
+
+        @app.route("/vaccinator_resist", methods=["POST"])
+        def vaccinator_resist():
+            data = request.get_json(force=True, silent=True) or {}
+            idx = int(data.get("index", self.vaccinator_resist_index))
+            self.vaccinator_resist_index = idx % len(VACCINATOR_RESISTANCES)
+            self._broadcast_vaccinator_state()
+            return jsonify({
+                "resist": self._vaccinator_resist_name(),
+                "index":  self.vaccinator_resist_index,
+            })
+
         @app.route("/set_follow_mode", methods=["POST"])
         def set_follow_mode():
-            data = request.get_json(force=True,silent=True) or {}
-            mode = data.get("mode","active")
+            data = request.get_json(force=True, silent=True) or {}
+            mode = data.get("mode", "active")
             CONFIG["follow_enabled"] = (mode == "active")
             return jsonify({"mode": mode})
+
         @app.route("/weapons")
         def weapons(): return jsonify(self.loadout.available_weapons)
+
         @app.route("/equip_weapon", methods=["POST"])
         def equip():
-            data = request.get_json(force=True,silent=True) or {}
-            name = data.get("weapon","")
-            if name:
-                self.loadout.equip_async(name, self)
-            return jsonify({"status":"equipping","weapon":name})
+            data = request.get_json(force=True, silent=True) or {}
+            name = data.get("weapon", "")
+            if name: self.loadout.equip_async(name, self)
+            return jsonify({"status": "equipping", "weapon": name})
+
         @app.route("/detect_team", methods=["POST"])
         def detect_team():
             team = self.detect_own_team()
             return jsonify({"team": team})
+
         @app.route("/debug_snapshot", methods=["POST"])
         def debug_snapshot():
-            debug_dir = Path("debug")
-            debug_dir.mkdir(exist_ok=True)
+            debug_dir = Path("debug"); debug_dir.mkdir(exist_ok=True)
             frame = self.vision.capture()
-            if frame is None: return jsonify({"error":"no frame"}),500
+            if frame is None: return jsonify({"error": "no frame"}), 500
             ts = time.strftime("%Y%m%d_%H%M%S")
             frame_path = debug_dir / f"frame_{ts}.png"
+            mask_path  = debug_dir / f"mask_{ts}.png"
             cv2.imwrite(str(frame_path), frame)
-            mask = self.vision.get_team_mask(frame)
-            mask_path = debug_dir / f"mask_{ts}.png"
-            cv2.imwrite(str(mask_path), mask)
+            cv2.imwrite(str(mask_path), self.vision.get_team_mask(frame))
             return jsonify({"frame": str(frame_path), "mask": str(mask_path)})
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1377,8 +1401,26 @@ class MedicBot:
 # ═══════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     bot = MedicBot()
-    # PRO TIP: Bind to 0.0.0.0 to allow connections from other IPs (Run as ADMIN if needed)
-    threading.Thread(target=lambda: bot.start_ws(host="0.0.0.0"), daemon=True).start()
-    time.sleep(0.5)
+
+    # Start WebSocket server in a background thread
+    ws_thread = threading.Thread(
+        target=lambda: bot.start_ws(host="0.0.0.0"),
+        daemon=True,
+        name="ws-server"
+    )
+    ws_thread.start()
+
+    # Block here until the WebSocket server is actually listening
+    # (replaces the old unreliable time.sleep(0.5))
+    if not bot.wait_until_ws_ready(timeout=10.0):
+        logger.error("WebSocket server failed to start within 10 seconds — exiting.")
+        sys.exit(1)
+
     logger.info("Flask API on http://0.0.0.0:5000")
-    bot.app.run(host="0.0.0.0", port=5000, threaded=True, debug=False, use_reloader=False)
+    bot.app.run(
+        host="0.0.0.0",
+        port=CONFIG.get("flask_port", 5000),
+        threaded=True,
+        debug=False,
+        use_reloader=False,
+    )

@@ -1,379 +1,93 @@
 <UserControl x:Class="MedicAIGUI.Views.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Foreground="White">
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="20">
+            <TextBlock Text="Settings" FontSize="24" FontWeight="Bold" Margin="0,0,0,20"/>
 
-        <!-- Header -->
-        <Grid Margin="0,0,0,16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Settings" FontSize="22" FontWeight="Bold" Margin="0,0,16,0"/>
-                <Border x:Name="UnsavedIndicator" Background="#F2586B" CornerRadius="10" Padding="10,4" Visibility="Collapsed">
-                    <TextBlock Text="UNSAVED CHANGES" FontSize="10" FontWeight="Bold"/>
-                </Border>
-            </StackPanel>
-            <WrapPanel Grid.Column="1">
-                <Button Content="Save to Bot" Width="120" Height="38" Margin="0,0,10,0" Click="SaveToBot_Click" Background="#4ED9FF" Foreground="#0C121B" FontWeight="Bold"/>
-                <Button Content="Sync All Settings" Width="150" Height="38" Margin="0,0,10,0" Click="SyncAll_Click"/>
-                <Button x:Name="SaveProfileBtn" Content="Save Profile" Width="120" Height="38" Margin="0,0,10,0" Click="SaveProfileBtn_Click"/>
-                <Button x:Name="LoadProfileBtn" Content="Load Profile" Width="120" Height="38" Click="LoadProfileBtn_Click"/>
-            </WrapPanel>
-        </Grid>
+            <!-- General Settings -->
+            <GroupBox Header="General" Margin="0,0,0,15">
+                <StackPanel Margin="10">
+                    <CheckBox x:Name="AutoStartBot" Content="Auto-start bot on application launch" 
+                              IsChecked="{Binding AutoStartBot, Mode=TwoWay}"/>
+                    <CheckBox x:Name="MinimizeToTray" Content="Minimize to system tray" 
+                              IsChecked="{Binding MinimizeToTray, Mode=TwoWay}"/>
+                </StackPanel>
+            </GroupBox>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
-                <!-- Connection -->
-                <Border Background="#101826" CornerRadius="18" Padding="20" Margin="0,0,0,16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock Text="Bot IP" FontWeight="Bold"/>
-                            <TextBox x:Name="BotIpInput" Text="{Binding BotIp, UpdateSourceTrigger=PropertyChanged}" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="0,0,16,0">
-                            <TextBlock Text="Port" FontWeight="Bold"/>
-                            <TextBox x:Name="PortInput" Text="{Binding WsPort, UpdateSourceTrigger=PropertyChanged}" />
-                        </StackPanel>
-                        <Button x:Name="DetectIpBtn" Grid.Column="2" Content="Detect IP" Width="110" Height="38" VerticalAlignment="Bottom" Click="DetectIpBtn_Click"/>
-                    </Grid>
-                </Border>
+            <!-- Vaccinator Overlay Settings -->
+            <GroupBox Header="Vaccinator Overlay" Margin="0,0,0,15">
+                <StackPanel Margin="10">
+                    <CheckBox x:Name="EnableVaccinatorOverlay" Content="Show Vaccinator resistance overlay" 
+                              IsChecked="{Binding ShowVaccinatorOverlay, Mode=TwoWay}"/>
+                    <Slider x:Name="OverlayOpacity" Minimum="0.3" Maximum="1.0" 
+                            Value="{Binding OverlayOpacity, Mode=TwoWay}" Width="200" Margin="0,5,0,0"/>
+                    <TextBlock Text="Opacity:" Margin="0,2,0,0"/>
+                </StackPanel>
+            </GroupBox>
 
-                <TabControl Background="Transparent" BorderThickness="0">
-                    <!-- AIM & MOUSE (Expanded) -->
-                    <TabItem Header="Aim &amp; Mouse">
-                        <ScrollViewer>
-                            <StackPanel Margin="20">
-                                <Expander Header="🎯 Basic Aiming" IsExpanded="True" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
-                                    <StackPanel Margin="10">
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Mouse speed"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MouseSpeedSlider, StringFormat={}{0:F2}}"/>
-                                        </Grid>
-                                        <Slider x:Name="MouseSpeedSlider" Minimum="0.1" Maximum="2.0" Value="{Binding MouseSpeed, Mode=TwoWay}"/>
+            <!-- Keybinds Section -->
+            <GroupBox Header="Keybinds" Margin="0,0,0,15">
+                <StackPanel Margin="10">
+                    <!-- Vaccinator Cycle Key -->
+                    <StackPanel Orientation="Horizontal" Margin="0,5">
+                        <Label Content="Cycle Resistance Key:" Width="150"/>
+                        <TextBox x:Name="VaccinatorCycleKey" Text="{Binding VaccinatorCycleKey, Mode=TwoWay}" Width="60"/>
+                        <ComboBox x:Name="VaccinatorCycleModifier" SelectedItem="{Binding VaccinatorCycleModifier, Mode=TwoWay}" Width="80" Margin="5,0">
+                            <ComboBoxItem>None</ComboBoxItem>
+                            <ComboBoxItem>Control</ComboBoxItem>
+                            <ComboBoxItem>Alt</ComboBoxItem>
+                            <ComboBoxItem>Shift</ComboBoxItem>
+                            <ComboBoxItem>Windows</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
 
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Deadzone (px)"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=DeadzoneSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="DeadzoneSlider" Minimum="0" Maximum="30" Value="{Binding DeadzonePx, Mode=TwoWay}"/>
+                    <!-- Uber Pop Keybind -->
+                    <StackPanel Orientation="Horizontal" Margin="0,5">
+                        <Label Content="Uber Pop Keybind:" Width="150"/>
+                        <TextBox x:Name="UberKeybind" Text="{Binding UberKeybind, Mode=TwoWay}" Width="60"/>
+                        <ComboBox x:Name="UberModifier" SelectedItem="{Binding UberModifier, Mode=TwoWay}" Width="80" Margin="5,0">
+                            <ComboBoxItem>None</ComboBoxItem>
+                            <ComboBoxItem>Control</ComboBoxItem>
+                            <ComboBoxItem>Alt</ComboBoxItem>
+                            <ComboBoxItem>Shift</ComboBoxItem>
+                            <ComboBoxItem>Windows</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
 
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Max move px"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxMoveSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="MaxMoveSlider" Minimum="1" Maximum="50" Value="{Binding MaxMovePx, Mode=TwoWay}"/>
+                    <!-- Optional: Custom key for switching resist to match bot -->
+                    <StackPanel Orientation="Horizontal" Margin="0,5">
+                        <Label Content="Match Bot Resistance Key:" Width="150"/>
+                        <TextBox x:Name="MatchResistKey" Text="{Binding MatchResistKey, Mode=TwoWay}" Width="60"/>
+                        <ComboBox x:Name="MatchResistModifier" SelectedItem="{Binding MatchResistModifier, Mode=TwoWay}" Width="80" Margin="5,0">
+                            <ComboBoxItem>None</ComboBoxItem>
+                            <ComboBoxItem>Control</ComboBoxItem>
+                            <ComboBoxItem>Alt</ComboBoxItem>
+                            <ComboBoxItem>Shift</ComboBoxItem>
+                            <ComboBoxItem>Windows</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
 
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Max target distance"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxDistSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="MaxDistSlider" Minimum="100" Maximum="800" Value="{Binding MaxDist, Mode=TwoWay}"/>
+                    <Button Content="Apply Keybinds" Click="ApplyKeybinds_Click" Margin="0,15,0,0" Width="120" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </GroupBox>
 
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Aim lead factor"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=LeadFactorSlider, StringFormat={}{0:F2}}"/>
-                                        </Grid>
-                                        <Slider x:Name="LeadFactorSlider" Minimum="0.0" Maximum="0.5" Value="{Binding AimLeadFactor, Mode=TwoWay}"/>
-                                    </StackPanel>
-                                </Expander>
+            <!-- Bot Behavior Settings -->
+            <GroupBox Header="Bot Behavior" Margin="0,0,0,15">
+                <StackPanel Margin="10">
+                    <CheckBox x:Name="AutoHeal" Content="Auto-heal nearby allies" IsChecked="{Binding AutoHeal, Mode=TwoWay}"/>
+                    <CheckBox x:Name="AutoUber" Content="Auto-uber at critical health" IsChecked="{Binding AutoUber, Mode=TwoWay}"/>
+                    <Label Content="Uber Charge Threshold (%):"/>
+                    <Slider x:Name="UberThreshold" Minimum="0" Maximum="100" Value="{Binding UberThreshold, Mode=TwoWay}"/>
+                    <TextBlock Text="{Binding ElementName=UberThreshold, Path=Value, StringFormat={}{0:F0}%}"/>
+                </StackPanel>
+            </GroupBox>
 
-                                <Expander Header="📈 PID Gains" IsExpanded="False" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
-                                    <StackPanel Margin="10">
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Kp (Proportional)"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=KpSlider, StringFormat={}{0:F2}}"/>
-                                        </Grid>
-                                        <Slider x:Name="KpSlider" Minimum="0.0" Maximum="0.5" Value="{Binding PidKp, Mode=TwoWay}"/>
-
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Ki (Integral)"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=KiSlider, StringFormat={}{0:F3}}"/>
-                                        </Grid>
-                                        <Slider x:Name="KiSlider" Minimum="0.0" Maximum="0.1" Value="{Binding PidKi, Mode=TwoWay}"/>
-
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Kd (Derivative)"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=KdSlider, StringFormat={}{0:F2}}"/>
-                                        </Grid>
-                                        <Slider x:Name="KdSlider" Minimum="0.0" Maximum="0.2" Value="{Binding PidKd, Mode=TwoWay}"/>
-                                    </StackPanel>
-                                </Expander>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </TabItem>
-
-                    <!-- TRACKING & LOCK -->
-                    <TabItem Header="Tracking &amp; Lock">
-                        <ScrollViewer>
-                            <StackPanel Margin="20">
-                                <Expander Header="🔒 Lock Behavior" IsExpanded="True" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
-                                    <StackPanel Margin="10">
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Min hits to confirm"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MinHitsSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="MinHitsSlider" Minimum="1" Maximum="10" Value="{Binding TrackMinHits, Mode=TwoWay}" IsSnapToTickEnabled="True"/>
-
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Max lost frames"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=MaxLostSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="MaxLostSlider" Minimum="2" Maximum="15" Value="{Binding TrackMaxLost, Mode=TwoWay}" IsSnapToTickEnabled="True"/>
-
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Lock duration (sec)"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=LockDurSlider, StringFormat={}{0:F1}}"/>
-                                        </Grid>
-                                        <Slider x:Name="LockDurSlider" Minimum="0.5" Maximum="5.0" Value="{Binding LockDuration, Mode=TwoWay}"/>
-                                    </StackPanel>
-                                </Expander>
-
-                                <Expander Header="🚶 Follow Movement" IsExpanded="False" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
-                                    <StackPanel Margin="10">
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Forward threshold"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=FwdThreshSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="FwdThreshSlider" Minimum="50" Maximum="400" Value="{Binding FollowFwdThresh, Mode=TwoWay}"/>
-
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Backward threshold"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=BackThreshSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="BackThreshSlider" Minimum="20" Maximum="200" Value="{Binding FollowBackThresh, Mode=TwoWay}"/>
-
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Strafe threshold"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=StrafeThreshSlider, StringFormat={}{0:0}}"/>
-                                        </Grid>
-                                        <Slider x:Name="StrafeThreshSlider" Minimum="30" Maximum="300" Value="{Binding FollowStrafeThresh, Mode=TwoWay}"/>
-                                    </StackPanel>
-                                </Expander>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </TabItem>
-
-                    <!-- BEHAVIOR -->
-                    <TabItem Header="Behavior">
-                        <ScrollViewer>
-                            <StackPanel Margin="20">
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Retreat health threshold"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=RetreatSlider, StringFormat={}{0:0}}"/>
-                                </Grid>
-                                <Slider x:Name="RetreatSlider" Minimum="0" Maximum="150" Value="{Binding RetreatHealthThreshold, Mode=TwoWay}"/>
-
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Uber pop threshold"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=UberSlider, StringFormat={}{0:F0}}"/>
-                                </Grid>
-                                <Slider x:Name="UberSlider" Minimum="0" Maximum="100" Value="{Binding UberPopThreshold, Mode=TwoWay}"/>
-
-                                <CheckBox Content="Auto Uber" IsChecked="{Binding AutoUber, Mode=TwoWay}" Margin="0,10,0,0"/>
-                                <CheckBox Content="Prefer melee on retreat" IsChecked="{Binding PreferMeleeForRetreat, Mode=TwoWay}" Margin="0,10,0,0"/>
-                                <CheckBox Content="Follow enabled" IsChecked="{Binding FollowEnabled, Mode=TwoWay}" Margin="0,10,0,10"/>
-
-                                <!-- VACCINATOR OVERLAY SETTINGS -->
-                                <TextBlock Text="Vaccinator Overlay Position" FontWeight="Bold" Foreground="#4ED9FF" Margin="0,15,0,10"/>
-                                <TextBlock Text="(Set to 0,0 for default center offset)" FontSize="10" Opacity="0.6" Margin="0,-5,0,10"/>
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Overlay X Position (px)"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=VacXSlider, StringFormat={}{0:0}}"/>
-                                </Grid>
-                                <Slider x:Name="VacXSlider" Minimum="0" Maximum="3000" Value="{Binding VaccinatorOverlayX, Mode=TwoWay}"/>
-
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Overlay Y Position (px)"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=VacYSlider, StringFormat={}{0:0}}"/>
-                                </Grid>
-                                <Slider x:Name="VacYSlider" Minimum="0" Maximum="2000" Value="{Binding VaccinatorOverlayY, Mode=TwoWay}"/>
-
-                                <!-- KEYBIND SETTINGS -->
-                                <TextBlock Text="Keybinds" FontWeight="Bold" Foreground="#4ED9FF" Margin="0,20,0,10"/>
-                                
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="120"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="Vaccinator Cycle Key" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Press this key to cycle resistance on both you and the bot" FontSize="10" Opacity="0.5"/>
-                                    </StackPanel>
-                                    <TextBox Grid.Column="1" x:Name="VacCycleKeyInput" Text="{Binding VaccinatorCycleKey, UpdateSourceTrigger=PropertyChanged}" 
-                                             VerticalAlignment="Center" TextAlignment="Center" FontWeight="Bold" FontSize="14"/>
-                                </Grid>
-
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="120"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="Uber Keybind" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Key to pop uber (M2 = right-click, or any key like F)" FontSize="10" Opacity="0.5"/>
-                                    </StackPanel>
-                                    <TextBox Grid.Column="1" x:Name="UberKeybindInput" Text="{Binding UberKeybind, UpdateSourceTrigger=PropertyChanged}" 
-                                             VerticalAlignment="Center" TextAlignment="Center" FontWeight="Bold" FontSize="14"/>
-                                </Grid>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </TabItem>
-
-                    <!-- HSV COLORS -->
-                    <TabItem Header="HSV Colors">
-                        <ScrollViewer>
-                            <StackPanel Margin="20">
-                                <Expander Header="🔵 BLU Team" IsExpanded="True" Foreground="#4ED9FF" FontWeight="Bold" Margin="0,0,0,10">
-                                    <StackPanel Margin="10">
-                                        <Grid Margin="0,0,0,15">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="Detection Range Preview" VerticalAlignment="Center" Opacity="0.7" FontSize="11" Margin="0,0,0,4"/>
-                                                <TextBlock Text="Adjust sliders below to match the team color" FontSize="10" Opacity="0.5"/>
-                                            </StackPanel>
-                                            <Border Grid.Column="1" Width="100" Height="50" CornerRadius="10" Background="{Binding BluPreviewBrush}" BorderBrush="#30FFFFFF" BorderThickness="1">
-                                                <Border.Effect>
-                                                    <DropShadowEffect BlurRadius="20" Opacity="0.5" ShadowDepth="0" Color="#4ED9FF"/>
-                                                </Border.Effect>
-                                            </Border>
-                                        </Grid>
-
-                                        <!-- Hue -->
-                                        <Grid Margin="0,5,0,5">
-                                            <TextBlock Text="Hue (Color Type)" FontWeight="SemiBold"/>
-                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
-                                                <TextBlock Text="{Binding BluHMin}"/>
-                                                <TextBlock Text=" - "/>
-                                                <TextBlock Text="{Binding BluHMax}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                        <Grid Height="30" Margin="0,0,0,5">
-                                            <Border CornerRadius="6">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                        <GradientStop Color="#FF0000" Offset="0.0"/>
-                                                        <GradientStop Color="#FFFF00" Offset="0.16"/>
-                                                        <GradientStop Color="#00FF00" Offset="0.33"/>
-                                                        <GradientStop Color="#00FFFF" Offset="0.5"/>
-                                                        <GradientStop Color="#0000FF" Offset="0.66"/>
-                                                        <GradientStop Color="#FF00FF" Offset="0.83"/>
-                                                        <GradientStop Color="#FF0000" Offset="1.0"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                            </Border>
-                                        </Grid>
-                                        <Grid Margin="0,0,0,15">
-                                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-                                            <Slider Minimum="0" Maximum="179" Value="{Binding BluHMin, Mode=TwoWay}" ToolTip="Min Hue"/>
-                                            <Slider Grid.Row="1" Minimum="0" Maximum="179" Value="{Binding BluHMax, Mode=TwoWay}" ToolTip="Max Hue"/>
-                                        </Grid>
-
-                                        <!-- Saturation -->
-                                        <Grid Margin="0,5,0,5">
-                                            <TextBlock Text="Saturation (Intensity)" FontWeight="SemiBold"/>
-                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
-                                                <TextBlock Text="{Binding BluSMin}"/>
-                                                <TextBlock Text=" - "/>
-                                                <TextBlock Text="{Binding BluSMax}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluSMin, Mode=TwoWay}" Margin="0,0,0,5"/>
-                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluSMax, Mode=TwoWay}" Margin="0,0,0,15"/>
-
-                                        <!-- Value -->
-                                        <Grid Margin="0,5,0,5">
-                                            <TextBlock Text="Value (Brightness)" FontWeight="SemiBold"/>
-                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
-                                                <TextBlock Text="{Binding BluVMin}"/>
-                                                <TextBlock Text=" - "/>
-                                                <TextBlock Text="{Binding BluVMax}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluVMin, Mode=TwoWay}" Margin="0,0,0,5"/>
-                                        <Slider Minimum="0" Maximum="255" Value="{Binding BluVMax, Mode=TwoWay}" Margin="0,0,0,5"/>
-                                    </StackPanel>
-                                </Expander>
-
-                                <Expander Header="🔴 RED Team" IsExpanded="False" Foreground="#F2586B" FontWeight="Bold" Margin="0,0,0,10">
-                                    <StackPanel Margin="10">
-                                        <Grid Margin="0,0,0,15">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="Detection Range Preview" VerticalAlignment="Center" Opacity="0.7" FontSize="11" Margin="0,0,0,4"/>
-                                                <TextBlock Text="Red typically requires two hue ranges (0-10 &amp; 170-180)" FontSize="10" Opacity="0.5"/>
-                                            </StackPanel>
-                                            <Border Grid.Column="1" Width="100" Height="50" CornerRadius="10" Background="{Binding RedPreviewBrush}" BorderBrush="#30FFFFFF" BorderThickness="1">
-                                                <Border.Effect>
-                                                    <DropShadowEffect BlurRadius="20" Opacity="0.5" ShadowDepth="0" Color="#F2586B"/>
-                                                </Border.Effect>
-                                            </Border>
-                                        </Grid>
-
-                                        <Grid Margin="0,5,0,0">
-                                            <TextBlock Text="Hue Range 1 (0-10ish)" FontWeight="SemiBold"/>
-                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
-                                                <TextBlock Text="{Binding Red1HMin}"/>
-                                                <TextBlock Text=" - "/>
-                                                <TextBlock Text="{Binding Red1HMax}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                        <Slider Minimum="0" Maximum="40" Value="{Binding Red1HMin, Mode=TwoWay}" Margin="0,0,0,5"/>
-                                        <Slider Minimum="0" Maximum="40" Value="{Binding Red1HMax, Mode=TwoWay}" Margin="0,0,0,15"/>
-
-                                        <Grid Margin="0,5,0,0">
-                                            <TextBlock Text="Hue Range 2 (170-179)" FontWeight="SemiBold"/>
-                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Opacity="0.5">
-                                                <TextBlock Text="{Binding Red2HMin}"/>
-                                                <TextBlock Text=" - "/>
-                                                <TextBlock Text="{Binding Red2HMax}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                        <Slider Minimum="140" Maximum="179" Value="{Binding Red2HMin, Mode=TwoWay}" Margin="0,0,0,5"/>
-                                        <Slider Minimum="140" Maximum="179" Value="{Binding Red2HMax, Mode=TwoWay}" Margin="0,0,0,5"/>
-                                    </StackPanel>
-                                </Expander>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </TabItem>
-                </TabControl>
-            </StackPanel>
-        </ScrollViewer>
-    </Grid>
+            <Button Content="Save All Settings" Click="SaveAll_Click" Width="150" Height="30" Margin="0,20"/>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>
